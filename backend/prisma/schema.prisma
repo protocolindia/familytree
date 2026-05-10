@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,6 +12,8 @@ model User {
   email     String   @unique
   name      String
   password  String
+  role      String   @default("USER")
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -23,10 +23,10 @@ model User {
 
 model Tree {
   id          String   @id @default(cuid())
-  name        String                       // Telugu name
-  nameEn      String                       // English name
+  name        String
+  nameEn      String
   description String?
-  visibility  String   @default("private") // "public" | "private"
+  visibility  String   @default("private")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -38,9 +38,9 @@ model Tree {
 
 model Person {
   id         String   @id @default(cuid())
-  name       String                      // Telugu name
-  nameEn     String                      // English name
-  gender     String   @default("male")   // "male" | "female"
+  name       String
+  nameEn     String
+  gender     String   @default("male")
   birth      String?
   death      String?
   education  String?
@@ -52,16 +52,13 @@ model Person {
 
   tree       Tree           @relation(fields: [treeId], references: [id], onDelete: Cascade)
   treeId     String
-
-  // Relationships where this person is the parent
   parentRels Relationship[] @relation("Parent")
-  // Relationships where this person is the child
   childRels  Relationship[] @relation("Child")
 }
 
 model Relationship {
   id       String @id @default(cuid())
-  relType  String // "son","daughter","wife","husband","brother","sister","ex-wife","ex-husband"...
+  relType  String
 
   parent   Person @relation("Parent", fields: [parentId], references: [id], onDelete: Cascade)
   parentId String
@@ -73,11 +70,11 @@ model Relationship {
 
 model Permission {
   id     String @id @default(cuid())
-  role   String // "admin" | "viewer"
+  role   String
 
-  user   User   @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
-  tree   Tree   @relation(fields: [treeId],  references: [id], onDelete: Cascade)
+  tree   Tree   @relation(fields: [treeId], references: [id], onDelete: Cascade)
   treeId String
 
   @@unique([userId, treeId])

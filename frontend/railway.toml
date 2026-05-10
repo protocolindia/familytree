@@ -1,13 +1,6 @@
-# frontend/railway.toml
 [build]
 builder = "NIXPACKS"
 buildCommand = "npm install && npm run build"
 
 [deploy]
-startCommand = "npx serve dist -p $PORT"
-
-# Serve SPA — all paths → index.html
-[[redirects]]
-from = "/*"
-to   = "/index.html"
-status = 200
+startCommand = "npx serve dist -p $PORT --single"

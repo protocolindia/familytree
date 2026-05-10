@@ -1,25 +1,28 @@
 # వంశవృక్షం — Family Tree SaaS
 
-Telugu & English family tree builder powered by Claude AI.
+Telugu & English family tree builder with AI, admin panel, Railway deployment.
 
-## Architecture
-
+## Project Structure
 ```
-vamsavriksham/
-├── frontend/    React + Vite  (Railway Static Service)
-├── backend/     Node.js + Express + Prisma  (Railway Web Service)
+familytree/
+├── backend/     Node.js + Express + Prisma (Tier 2)
+├── frontend/    React + Vite              (Tier 1)
 └── README.md
 ```
 
-## Local Development
+## Railway Environment Variables
 
-```bash
-# Backend
-cd backend && npm install && npm run dev
+### Backend
+| Variable | Value |
+|---|---|
+| DATABASE_URL | Auto-linked from PostgreSQL plugin |
+| JWT_SECRET | any long random string |
+| ANTHROPIC_API_KEY | sk-ant-... |
+| CLOUDINARY_CLOUD_NAME | from cloudinary.com |
+| CLOUDINARY_API_KEY | from cloudinary.com |
+| CLOUDINARY_API_SECRET | from cloudinary.com |
 
-# Frontend (separate terminal)
-cd frontend && npm install && npm run dev
-```
-
-## Deploy on Railway
-See docs/DEPLOY.md for step-by-step instructions.
+### Frontend
+| Variable | Value |
+|---|---|
+| VITE_API_URL | https://your-backend.up.railway.app |
