@@ -14,97 +14,217 @@ const api = async (method, path, body) => {
 };
 
 const ROLE_COLORS = {
-  SUPERADMIN: { bg:"var(--color-background-danger)",  text:"var(--color-text-danger)",   label:"SuperAdmin" },
-  ADMIN:      { bg:"var(--color-background-warning)", text:"var(--color-text-warning)",  label:"Admin" },
-  USER:       { bg:"var(--color-background-secondary)",text:"var(--color-text-secondary)",label:"User" },
+  SUPERADMIN:{ bg:"#f8514922", text:"#ff8182", border:"#f85149", label:"SuperAdmin" },
+  ADMIN:     { bg:"#d2992222", text:"#e3b341", border:"#d29922", label:"Admin" },
+  USER:      { bg:"#30363d",   text:"#8b949e", border:"#484f58", label:"User" },
 };
-const RoleBadge = ({role}) => { const c=ROLE_COLORS[role]||ROLE_COLORS.USER; return <span style={{background:c.bg,color:c.text,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:600}}>{c.label}</span>; };
-const StatusBadge = ({active}) => <span style={{background:active?"var(--color-background-success)":"var(--color-background-secondary)",color:active?"var(--color-text-success)":"var(--color-text-tertiary)",padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:600}}>{active?"Active":"Inactive"}</span>;
+const RoleBadge = ({role}) => { const c=ROLE_COLORS[role]||ROLE_COLORS.USER; return <span style={{background:c.bg,color:c.text,border:`1px solid ${c.border}`,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:700}}>{c.label}</span>; };
+const StatusBadge = ({active}) => <span style={{background:active?"#3fb95022":"#30363d",color:active?"#3fb950":"#8b949e",border:`1px solid ${active?"#3fb950":"#484f58"}`,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:700}}>{active?"Active":"Inactive"}</span>;
 
 function StatCard({icon,label,value,sub,color}){
   return(
-    <div className="adm-stat">
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-        <div style={{width:36,height:36,borderRadius:"var(--border-radius-md)",background:color+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <i className={`ti ${icon}`} style={{fontSize:18,color}}/>
+    <div style={{background:"#161b22",border:"1px solid #30363d",borderRadius:12,padding:16}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{width:40,height:40,borderRadius:10,background:color+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <i className={`ti ${icon}`} style={{fontSize:20,color}}/>
         </div>
-        <div style={{fontSize:26,fontWeight:600,color:"var(--color-text-primary)"}}>{value}</div>
+        <div style={{fontSize:28,fontWeight:700,color:"#e6edf3"}}>{value}</div>
       </div>
-      <div style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>{label}</div>
-      {sub&&<div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{sub}</div>}
+      <div style={{fontSize:12,fontWeight:600,color:"#e6edf3"}}>{label}</div>
+      {sub&&<div style={{fontSize:10,color:"#6e7681",marginTop:2}}>{sub}</div>}
     </div>
   );
 }
 
-function AddUserModal({onClose,onAdd}){
-  const [form,setForm]=useState({name:"",email:"",password:"",role:"USER"});
-  const [loading,setLoad]=useState(false);const [error,setError]=useState("");
-  const upd=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
-  const submit=async()=>{
-    if(!form.name||!form.email||!form.password)return setError("All fields required");
-    setLoad(true);setError("");
-    try{const u=await api("POST","/api/admin/users",form);onAdd(u);onClose();}
-    catch(e){setError(e.message);}
-    setLoad(false);
+// ── Settings Tab ──────────────────────────────────────────
+function SettingsTab(){
+  const [settings,setSettings] = useState({});
+  const [loading,setLoading]   = useState(true);
+  const [saving,setSaving]     = useState(false);
+  const [msg,setMsg]           = useState({text:"",type:""});
+
+  useEffect(()=>{
+    api("GET","/api/settings").then(data=>{setSettings(data);}).catch(()=>{}).finally(()=>setLoading(false));
+  },[]);
+
+  const upd = k => e => setSettings(s=>({...s,[k]:e.target.type==="checkbox"?String(e.target.checked):e.target.value}));
+
+  const save = async (keys) => {
+    setSaving(true); setMsg({text:"",type:""});
+    try {
+      const subset = {};
+      keys.forEach(k=>{ if(settings[k]!==undefined) subset[k]=settings[k]; });
+      await api("POST","/api/settings",subset);
+      setMsg({text:"✓ Settings saved successfully",type:"success"});
+    } catch(e){ setMsg({text:"Error: "+e.message,type:"error"}); }
+    setSaving(false);
+    setTimeout(()=>setMsg({text:"",type:""}),3000);
   };
-  return(
-    <div className="ov" onClick={onClose}><div className="mb" onClick={e=>e.stopPropagation()}>
-      <div className="mh"><span style={{fontWeight:500}}>Add New User</span><button onClick={onClose} className="iconbtn">✕</button></div>
-      <div className="mbd">
-        {[["name","Full Name","text","Full name"],["email","Email","email","user@example.com"],["password","Password","password","••••••••"]].map(([k,lbl,t,ph])=>(
-          <div className="fg" key={k}><label>{lbl}</label><input type={t} value={form[k]} onChange={upd(k)} placeholder={ph} style={{width:"100%",fontSize:12}}/></div>
-        ))}
-        <div className="fg"><label>Role</label>
-          <select value={form.role} onChange={upd("role")} style={{width:"100%",fontSize:12}}>
-            <option value="USER">User</option><option value="ADMIN">Admin</option><option value="SUPERADMIN">SuperAdmin</option>
-          </select>
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"#6e7681"}}>Loading settings…</div>;
+
+  const Section = ({title,icon,color,children,saveKeys}) => (
+    <div style={{background:"#161b22",border:"1px solid #30363d",borderRadius:12,marginBottom:16,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid #30363d",background:"#0d1117"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:8,background:color+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <i className={`ti ${icon}`} style={{fontSize:16,color}}/>
+          </div>
+          <span style={{fontWeight:600,fontSize:13,color:"#e6edf3"}}>{title}</span>
         </div>
-        {error&&<div style={{color:"var(--color-text-danger)",fontSize:12,marginTop:6}}>{error}</div>}
+        <button className="btn1" style={{padding:"4px 12px",fontSize:11}} onClick={()=>save(saveKeys)} disabled={saving}>{saving?"Saving…":"Save"}</button>
       </div>
-      <div className="mf"><button className="btn2" onClick={onClose}>Cancel</button><button className="btn1" onClick={submit} disabled={loading}>{loading?"Adding…":"Add User"}</button></div>
-    </div></div>
+      <div style={{padding:"16px"}}>{children}</div>
+    </div>
+  );
+
+  const Field = ({label,k,type="text",placeholder="",hint,options}) => (
+    <div style={{marginBottom:14}}>
+      <label style={{display:"block",fontSize:10,color:"#6e7681",marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{label}</label>
+      {options ? (
+        <select value={settings[k]||""} onChange={upd(k)} style={{width:"100%",fontSize:12}}>
+          {options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+        </select>
+      ) : type==="toggle" ? (
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div onClick={()=>setSettings(s=>({...s,[k]:String(s[k]!=="true")}))}
+            style={{width:40,height:22,borderRadius:11,background:settings[k]==="true"?"#3b82f6":"#30363d",cursor:"pointer",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+            <div style={{position:"absolute",top:2,left:settings[k]==="true"?18:2,width:18,height:18,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+          </div>
+          <span style={{fontSize:12,color:"#8b949e"}}>{settings[k]==="true"?"Enabled":"Disabled"}</span>
+        </div>
+      ) : (
+        <input type={type} value={settings[k]||""} onChange={upd(k)} placeholder={placeholder} style={{width:"100%",fontSize:12}}/>
+      )}
+      {hint && <div style={{fontSize:10,color:"#6e7681",marginTop:3}}>{hint}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      {msg.text && <div style={{background:msg.type==="success"?"#3fb95022":"#f8514922",border:`1px solid ${msg.type==="success"?"#3fb950":"#f85149"}`,color:msg.type==="success"?"#3fb950":"#ff8182",padding:"10px 14px",borderRadius:8,marginBottom:16,fontSize:12}}>{msg.text}</div>}
+
+      {/* App Settings */}
+      <Section title="App Settings" icon="ti-settings" color="#3b82f6" saveKeys={["app_name","app_tagline","allow_registration","max_trees_per_user","maintenance_mode"]}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div><Field label="App Name" k="app_name" placeholder="వంశవృక్షం"/></div>
+          <div><Field label="App Tagline" k="app_tagline" placeholder="Telugu Family Tree Builder"/></div>
+          <div><Field label="Max Trees Per User" k="max_trees_per_user" type="number" placeholder="10" hint="Set 0 for unlimited"/></div>
+          <div><Field label="Allow Registration" k="allow_registration" type="toggle" hint="Disable to prevent new signups"/></div>
+          <div><Field label="Maintenance Mode" k="maintenance_mode" type="toggle" hint="Show maintenance page to all users"/></div>
+          <div><Field label="Default Tree Visibility" k="default_visibility" options={[["private","Private"],["public","Public"]]} hint="Default when creating new tree"/></div>
+        </div>
+      </Section>
+
+      {/* Anthropic AI Settings */}
+      <Section title="Anthropic AI Settings" icon="ti-sparkles" color="#7c3aed" saveKeys={["anthropic_api_key","anthropic_model","anthropic_max_tokens","enable_ai_chat"]}>
+        <div style={{background:"#0d1117",border:"1px solid #7c3aed44",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:11,color:"#a78bfa"}}>
+          <i className="ti ti-info-circle" style={{fontSize:12,marginRight:5}}/>
+          Get your API key from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{color:"#7c3aed"}}>console.anthropic.com</a>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div style={{gridColumn:"1/-1"}}><Field label="Anthropic API Key" k="anthropic_api_key" type="password" placeholder="sk-ant-api03-…" hint="Your secret Claude API key — never share this"/></div>
+          <div><Field label="Model" k="anthropic_model" options={[["claude-sonnet-4-20250514","Claude Sonnet 4 (Recommended)"],["claude-opus-4-5","Claude Opus 4.5 (Powerful)"],["claude-haiku-4-5-20251001","Claude Haiku 4.5 (Fast)"]]} hint="Model used for AI chat and image extraction"/></div>
+          <div><Field label="Max Tokens" k="anthropic_max_tokens" type="number" placeholder="1000" hint="Maximum response length"/></div>
+          <div><Field label="AI Chat Feature" k="enable_ai_chat" type="toggle" hint="Enable AI assistant in tree editor"/></div>
+          <div><Field label="Image Extraction" k="enable_image_extraction" type="toggle" hint="Allow users to upload genealogy images"/></div>
+        </div>
+      </Section>
+
+      {/* SMTP Settings */}
+      <Section title="SMTP / Email Settings" icon="ti-mail" color="#10b981" saveKeys={["smtp_host","smtp_port","smtp_user","smtp_pass","smtp_from_name","smtp_from_email","smtp_encryption","smtp_enabled"]}>
+        <div style={{background:"#0d1117",border:"1px solid #10b98144",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:11,color:"#6ee7b7"}}>
+          <i className="ti ti-info-circle" style={{fontSize:12,marginRight:5}}/>
+          Used for password reset, invite emails, and notifications
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div><Field label="SMTP Host" k="smtp_host" placeholder="smtp.gmail.com" hint="e.g. smtp.gmail.com, smtp.sendgrid.net"/></div>
+          <div><Field label="SMTP Port" k="smtp_port" type="number" placeholder="587" hint="Usually 587 (TLS) or 465 (SSL)"/></div>
+          <div><Field label="SMTP Username" k="smtp_user" placeholder="your@email.com"/></div>
+          <div><Field label="SMTP Password" k="smtp_pass" type="password" placeholder="••••••••" hint="App password recommended for Gmail"/></div>
+          <div><Field label="From Name" k="smtp_from_name" placeholder="వంశవృక్షం Team"/></div>
+          <div><Field label="From Email" k="smtp_from_email" placeholder="noreply@yourdomain.com"/></div>
+          <div><Field label="Encryption" k="smtp_encryption" options={[["tls","TLS (Port 587)"],["ssl","SSL (Port 465)"],["none","None (Port 25)"]]} hint="TLS recommended"/></div>
+          <div><Field label="Enable Emails" k="smtp_enabled" type="toggle" hint="Send system emails to users"/></div>
+        </div>
+        <div style={{marginTop:8}}>
+          <button className="btn2" style={{fontSize:11}} onClick={async()=>{
+            try{ await api("POST","/api/settings/test-email",{}); setMsg({text:"✓ Test email sent! Check your inbox.",type:"success"}); }
+            catch(e){ setMsg({text:"Error: "+e.message,type:"error"}); }
+          }}>
+            <i className="ti ti-send" style={{fontSize:11,marginRight:4}}/>Send Test Email
+          </button>
+        </div>
+      </Section>
+
+      {/* Cloudinary Storage */}
+      <Section title="Cloudinary Storage (Photos)" icon="ti-cloud-upload" color="#f59e0b" saveKeys={["cloudinary_cloud_name","cloudinary_api_key","cloudinary_api_secret","enable_photo_upload"]}>
+        <div style={{background:"#0d1117",border:"1px solid #f59e0b44",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:11,color:"#fcd34d"}}>
+          <i className="ti ti-info-circle" style={{fontSize:12,marginRight:5}}/>
+          Get credentials from <a href="https://cloudinary.com/console" target="_blank" rel="noreferrer" style={{color:"#f59e0b"}}>cloudinary.com/console</a> — free tier includes 25GB
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div><Field label="Cloud Name" k="cloudinary_cloud_name" placeholder="your-cloud-name"/></div>
+          <div><Field label="API Key" k="cloudinary_api_key" placeholder="123456789012345" type="password"/></div>
+          <div style={{gridColumn:"1/-1"}}><Field label="API Secret" k="cloudinary_api_secret" type="password" placeholder="••••••••••••••••" hint="Keep this secret — never expose in frontend"/></div>
+          <div><Field label="Photo Upload Feature" k="enable_photo_upload" type="toggle" hint="Allow users to upload profile photos"/></div>
+          <div><Field label="Max Photo Size (MB)" k="max_photo_size_mb" type="number" placeholder="5" hint="Maximum upload size"/></div>
+        </div>
+      </Section>
+
+      {/* Feature Toggles */}
+      <Section title="Feature Toggles" icon="ti-toggle-right" color="#06b6d4" saveKeys={["enable_public_trees","enable_guest_view","enable_search","enable_export","enable_telugu_ocr"]}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div><Field label="Public Trees" k="enable_public_trees" type="toggle" hint="Allow trees to be set as public"/></div>
+          <div><Field label="Guest View" k="enable_guest_view" type="toggle" hint="Non-logged-in users can view public trees"/></div>
+          <div><Field label="Tree Search" k="enable_search" type="toggle" hint="Search within a family tree"/></div>
+          <div><Field label="Export to PDF" k="enable_export" type="toggle" hint="Allow downloading tree as PDF"/></div>
+          <div><Field label="Telugu OCR" k="enable_telugu_ocr" type="toggle" hint="AI extracts from Telugu documents"/></div>
+          <div><Field label="Email Notifications" k="enable_notifications" type="toggle" hint="Notify users of invites and changes"/></div>
+        </div>
+      </Section>
+    </div>
   );
 }
 
+// ── Overview Tab ──────────────────────────────────────────
 function OverviewTab(){
   const [stats,setStats]=useState(null);
   useEffect(()=>{api("GET","/api/admin/stats").then(setStats).catch(()=>{});}, []);
-  if(!stats) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Loading stats…</div>;
+  if (!stats) return <div style={{textAlign:"center",padding:40,color:"#6e7681"}}>Loading…</div>;
   return(
     <div>
-      <div className="adm-stats-grid">
-        <StatCard icon="ti-users"       label="Total Users"       value={stats.totalUsers}         sub={`+${stats.recentUsers} this week`} color="var(--color-text-info)"/>
-        <StatCard icon="ti-binary-tree" label="Total Trees"       value={stats.totalTrees}         sub={`+${stats.recentTrees} this week`} color="var(--color-text-success)"/>
-        <StatCard icon="ti-user-circle" label="Family Members"    value={stats.totalPersons}       sub="People recorded"                   color="var(--color-text-warning)"/>
-        <StatCard icon="ti-arrows-join" label="Relationships"     value={stats.totalRelationships} sub="Links between members"             color="var(--color-text-danger)"/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:12,marginBottom:16}}>
+        <StatCard icon="ti-users"       label="Total Users"    value={stats.totalUsers}         sub={`+${stats.recentUsers} this week`} color="#3b82f6"/>
+        <StatCard icon="ti-binary-tree" label="Total Trees"    value={stats.totalTrees}         sub={`+${stats.recentTrees} this week`} color="#10b981"/>
+        <StatCard icon="ti-user-circle" label="Family Members" value={stats.totalPersons}       sub="People recorded"                   color="#f59e0b"/>
+        <StatCard icon="ti-arrows-join" label="Relationships"  value={stats.totalRelationships} sub="Links recorded"                    color="#8b5cf6"/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
-        <div className="adm-box">
-          <div className="adm-box-title">Tree Visibility</div>
-          {[["Public",stats.publicTrees,"var(--color-text-success)"],["Private",stats.privateTrees,"var(--color-text-secondary)"]].map(([lbl,val,col])=>(
-            <div key={lbl} style={{marginTop:12}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                <span style={{color:col,fontWeight:500}}>{lbl}</span>
-                <span style={{color:"var(--color-text-secondary)"}}>{val}/{stats.totalTrees}</span>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div style={{background:"#161b22",border:"1px solid #30363d",borderRadius:12,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#8b949e",marginBottom:14}}>Tree Visibility</div>
+          {[["Public",stats.publicTrees,"#10b981"],["Private",stats.privateTrees,"#8b949e"]].map(([lbl,val,col])=>(
+            <div key={lbl} style={{marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
+                <span style={{color:col,fontWeight:600}}>{lbl}</span>
+                <span style={{color:"#8b949e"}}>{val} / {stats.totalTrees}</span>
               </div>
-              <div style={{height:6,background:"var(--color-background-secondary)",borderRadius:999,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${stats.totalTrees>0?(val/stats.totalTrees)*100:0}%`,background:col,borderRadius:999}}/>
+              <div style={{height:6,background:"#21262d",borderRadius:999,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${stats.totalTrees>0?(val/stats.totalTrees)*100:0}%`,background:col,borderRadius:999,transition:"width 0.5s"}}/>
               </div>
             </div>
           ))}
         </div>
-        <div className="adm-box">
-          <div className="adm-box-title">User Roles</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-            {[["SUPERADMIN",stats.superAdmins],["ADMIN",stats.admins],["USER",stats.totalUsers-stats.superAdmins-stats.admins]].map(([role,val])=>(
-              <div key={role} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <RoleBadge role={role}/><span style={{fontSize:18,fontWeight:600}}>{val}</span>
-              </div>
-            ))}
-            <div style={{borderTop:"0.5px solid var(--color-border-tertiary)",paddingTop:8,display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontSize:11,color:"var(--color-text-secondary)"}}>Active accounts</span>
-              <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-success)"}}>{stats.activeUsers}</span>
+        <div style={{background:"#161b22",border:"1px solid #30363d",borderRadius:12,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#8b949e",marginBottom:14}}>User Roles</div>
+          {[["SUPERADMIN",stats.superAdmins],["ADMIN",stats.admins],["USER",stats.totalUsers-stats.superAdmins-stats.admins]].map(([role,val])=>(
+            <div key={role} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <RoleBadge role={role}/><span style={{fontSize:20,fontWeight:700,color:"#e6edf3"}}>{val}</span>
             </div>
+          ))}
+          <div style={{borderTop:"1px solid #30363d",paddingTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+            <span style={{fontSize:11,color:"#6e7681"}}>Active accounts</span>
+            <span style={{fontSize:16,fontWeight:700,color:"#3fb950"}}>{stats.activeUsers}</span>
           </div>
         </div>
       </div>
@@ -112,61 +232,96 @@ function OverviewTab(){
   );
 }
 
+// ── Users Tab ─────────────────────────────────────────────
 function UsersTab({currentUser}){
-  const [users,setUsers]=useState([]);const [loading,setLoad]=useState(true);
-  const [search,setSearch]=useState("");const [showAdd,setShowAdd]=useState(false);const [msg,setMsg]=useState("");
-  useEffect(()=>{api("GET","/api/admin/users").then(setUsers).finally(()=>setLoad(false));}, []);
-  const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),2500);};
-  const changeRole=async(id,role)=>{
-    try{const u=await api("PATCH",`/api/admin/users/${id}/role`,{role});setUsers(us=>us.map(u=>u.id===id?{...u,role:u.role}:u));setUsers(us=>us.map(x=>x.id===id?{...x,role}:x));flash("Role updated to "+role);}
-    catch(e){flash("Error: "+e.message);}
+  const [users,setUsers] = useState([]); const [loading,setLoad] = useState(true);
+  const [search,setSrch]  = useState(""); const [showAdd,setAdd]  = useState(false); const [msg,setMsg]=useState("");
+  useEffect(()=>{ api("GET","/api/admin/users").then(setUsers).finally(()=>setLoad(false)); }, []);
+  const flash = m => { setMsg(m); setTimeout(()=>setMsg(""),2500); };
+  const changeRole = async(id,role) => {
+    try { await api("PATCH",`/api/admin/users/${id}/role`,{role}); setUsers(us=>us.map(u=>u.id===id?{...u,role}:u)); flash("Role updated"); }
+    catch(e){ flash("Error: "+e.message); }
   };
-  const toggleStatus=async(id,isActive)=>{
-    try{const u=await api("PATCH",`/api/admin/users/${id}/status`,{isActive:!isActive});setUsers(us=>us.map(x=>x.id===id?{...x,isActive:u.isActive}:x));flash(u.isActive?"User activated":"User deactivated");}
-    catch(e){flash("Error: "+e.message);}
+  const toggleStatus = async(id,isActive) => {
+    try { const u=await api("PATCH",`/api/admin/users/${id}/status`,{isActive:!isActive}); setUsers(us=>us.map(x=>x.id===id?{...x,isActive:u.isActive}:x)); flash(u.isActive?"Activated":"Deactivated"); }
+    catch(e){ flash("Error: "+e.message); }
   };
-  const deleteUser=async(id,name)=>{
-    if(!window.confirm(`Delete user "${name}"? This cannot be undone.`))return;
-    try{await api("DELETE",`/api/admin/users/${id}`);setUsers(us=>us.filter(u=>u.id!==id));flash("User deleted");}
-    catch(e){flash("Error: "+e.message);}
+  const deleteUser = async(id,name) => {
+    if (!window.confirm(`Delete "${name}"?`)) return;
+    try { await api("DELETE",`/api/admin/users/${id}`); setUsers(us=>us.filter(u=>u.id!==id)); flash("Deleted"); }
+    catch(e){ flash("Error: "+e.message); }
   };
-  const filtered=users.filter(u=>u.name.toLowerCase().includes(search.toLowerCase())||u.email.toLowerCase().includes(search.toLowerCase()));
+  const filtered = users.filter(u=>u.name.toLowerCase().includes(search.toLowerCase())||u.email.toLowerCase().includes(search.toLowerCase()));
+
+  const AddUserModal = ({onClose,onAdd}) => {
+    const [form,setForm]=useState({name:"",email:"",password:"",role:"USER"}); const [load,setL]=useState(false); const [err,setE]=useState("");
+    const upd=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+    const submit=async()=>{
+      if(!form.name||!form.email||!form.password)return setE("All fields required");
+      setL(true); setE("");
+      try{const u=await api("POST","/api/admin/users",form);onAdd(u);onClose();}catch(e){setE(e.message);}setL(false);
+    };
+    return(
+      <div className="ov" onClick={onClose}><div className="mb" onClick={e=>e.stopPropagation()}>
+        <div className="mh"><span style={{fontWeight:600}}>Add New User</span><button onClick={onClose} className="iconbtn">✕</button></div>
+        <div style={{padding:16}}>
+          {[["name","Full Name","text","Full name"],["email","Email","email","user@example.com"],["password","Password","password","••••••••"]].map(([k,lbl,t,ph])=>(
+            <div style={{marginBottom:10}} key={k}><label style={{display:"block",fontSize:10,color:"#6e7681",marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{lbl}</label><input type={t} value={form[k]} onChange={upd(k)} placeholder={ph} style={{width:"100%",fontSize:12}}/></div>
+          ))}
+          <div style={{marginBottom:10}}><label style={{display:"block",fontSize:10,color:"#6e7681",marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>Role</label>
+            <select value={form.role} onChange={upd("role")} style={{width:"100%",fontSize:12}}><option value="USER">User</option><option value="ADMIN">Admin</option><option value="SUPERADMIN">SuperAdmin</option></select>
+          </div>
+          {err&&<div style={{color:"#ff8182",fontSize:12,marginTop:6}}>{err}</div>}
+        </div>
+        <div className="mf"><button className="btn2" onClick={onClose}>Cancel</button><button className="btn1" onClick={submit} disabled={load}>{load?"Adding…":"Add User"}</button></div>
+      </div></div>
+    );
+  };
+
   return(
     <div>
       <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search users…" style={{width:220,fontSize:12}}/>
-        <button className="btn1" style={{marginLeft:"auto"}} onClick={()=>setShowAdd(true)}><i className="ti ti-user-plus" style={{fontSize:12,marginRight:4}}/>Add User</button>
+        <input value={search} onChange={e=>setSrch(e.target.value)} placeholder="Search users…" style={{width:220,fontSize:12}}/>
+        <button className="btn1" style={{marginLeft:"auto"}} onClick={()=>setAdd(true)}><i className="ti ti-user-plus" style={{fontSize:12,marginRight:4}}/>Add User</button>
       </div>
-      {msg&&<div style={{background:"var(--color-background-success)",color:"var(--color-text-success)",padding:"7px 12px",borderRadius:"var(--border-radius-md)",fontSize:12,marginBottom:10}}>{msg}</div>}
-      {loading?<div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Loading users…</div>:(
-        <div className="adm-table-wrap">
-          <table className="adm-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Trees</th><th>Joined</th><th>Actions</th></tr></thead>
+      {msg&&<div style={{background:"#3fb95022",border:"1px solid #3fb950",color:"#3fb950",padding:"8px 12px",borderRadius:8,fontSize:12,marginBottom:10}}>{msg}</div>}
+      {loading?<div style={{textAlign:"center",padding:40,color:"#6e7681"}}>Loading…</div>:(
+        <div style={{border:"1px solid #30363d",borderRadius:12,overflow:"hidden",background:"#161b22"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead style={{background:"#0d1117"}}>
+              <tr>{["Name","Email","Role","Status","Trees","Joined","Actions"].map(h=>(
+                <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#6e7681",textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>
+              ))}</tr>
+            </thead>
             <tbody>
               {filtered.map(u=>(
-                <tr key={u.id} style={{opacity:u.isActive?1:0.6}}>
-                  <td>
+                <tr key={u.id} style={{opacity:u.isActive?1:0.5,borderTop:"1px solid #21262d"}}>
+                  <td style={{padding:"10px 12px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:28,height:28,borderRadius:"50%",background:"var(--color-background-info)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:"var(--color-text-info)",flexShrink:0}}>{u.name[0]}</div>
-                      <span style={{fontSize:12,fontWeight:500}}>{u.name}{u.id===currentUser.id&&<span style={{fontSize:10,color:"var(--color-text-info)",marginLeft:4}}>(you)</span>}</span>
+                      <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed822",border:"1px solid #1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#3b82f6",flexShrink:0}}>{u.name[0]}</div>
+                      <span style={{fontWeight:500,color:"#e6edf3"}}>{u.name}{u.id===currentUser.id&&<span style={{fontSize:9,color:"#3b82f6",marginLeft:4}}>(you)</span>}</span>
                     </div>
                   </td>
-                  <td style={{fontSize:11,color:"var(--color-text-secondary)"}}>{u.email}</td>
-                  <td>
+                  <td style={{padding:"10px 12px",color:"#8b949e",fontSize:11}}>{u.email}</td>
+                  <td style={{padding:"10px 12px"}}>
                     {u.id===currentUser.id?<RoleBadge role={u.role}/>:(
-                      <select value={u.role} onChange={e=>changeRole(u.id,e.target.value)} style={{fontSize:10,padding:"2px 4px",borderRadius:4,border:"0.5px solid var(--color-border-secondary)",background:"transparent",cursor:"pointer"}}>
+                      <select value={u.role} onChange={e=>changeRole(u.id,e.target.value)} style={{fontSize:10,padding:"2px 6px",background:"#0d1117",border:"1px solid #30363d",borderRadius:6,color:"#e6edf3",cursor:"pointer"}}>
                         <option value="USER">User</option><option value="ADMIN">Admin</option><option value="SUPERADMIN">SuperAdmin</option>
                       </select>
                     )}
                   </td>
-                  <td><StatusBadge active={u.isActive}/></td>
-                  <td style={{fontSize:12,textAlign:"center"}}>{u._count?.ownedTrees||0}</td>
-                  <td style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{u.createdAt?.slice(0,10)}</td>
-                  <td>
+                  <td style={{padding:"10px 12px"}}><StatusBadge active={u.isActive}/></td>
+                  <td style={{padding:"10px 12px",textAlign:"center",color:"#8b949e"}}>{u._count?.ownedTrees||0}</td>
+                  <td style={{padding:"10px 12px",color:"#6e7681",fontSize:10,whiteSpace:"nowrap"}}>{u.createdAt?.slice(0,10)}</td>
+                  <td style={{padding:"10px 12px"}}>
                     <div style={{display:"flex",gap:4}}>
                       {u.id!==currentUser.id&&<>
-                        <button className="adm-act-btn" title={u.isActive?"Deactivate":"Activate"} onClick={()=>toggleStatus(u.id,u.isActive)}><i className={`ti ti-${u.isActive?"user-off":"user-check"}`} style={{fontSize:12}}/></button>
-                        <button className="adm-act-btn adm-del" title="Delete" onClick={()=>deleteUser(u.id,u.name)}><i className="ti ti-trash" style={{fontSize:12}}/></button>
+                        <button onClick={()=>toggleStatus(u.id,u.isActive)} title={u.isActive?"Deactivate":"Activate"} style={{background:"#21262d",border:"1px solid #30363d",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"#8b949e",display:"inline-flex",alignItems:"center"}}>
+                          <i className={`ti ti-${u.isActive?"user-off":"user-check"}`} style={{fontSize:12}}/>
+                        </button>
+                        <button onClick={()=>deleteUser(u.id,u.name)} title="Delete" style={{background:"#21262d",border:"1px solid #30363d",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"#8b949e",display:"inline-flex",alignItems:"center"}}>
+                          <i className="ti ti-trash" style={{fontSize:12}}/>
+                        </button>
                       </>}
                     </div>
                   </td>
@@ -174,116 +329,113 @@ function UsersTab({currentUser}){
               ))}
             </tbody>
           </table>
-          {filtered.length===0&&<div style={{textAlign:"center",padding:24,color:"var(--color-text-tertiary)",fontSize:12}}>No users found</div>}
+          {filtered.length===0&&<div style={{textAlign:"center",padding:24,color:"#6e7681",fontSize:12}}>No users found</div>}
         </div>
       )}
-      {showAdd&&<AddUserModal onClose={()=>setShowAdd(false)} onAdd={u=>setUsers(us=>[u,...us])}/>}
+      {showAdd&&<AddUserModal onClose={()=>setAdd(false)} onAdd={u=>setUsers(us=>[u,...us])}/>}
     </div>
   );
 }
 
+// ── Trees Tab ─────────────────────────────────────────────
 function TreesTab(){
-  const [trees,setTrees]=useState([]);const [loading,setLoad]=useState(true);
-  const [search,setSearch]=useState("");const [msg,setMsg]=useState("");
-  useEffect(()=>{api("GET","/api/admin/trees").then(setTrees).finally(()=>setLoad(false));}, []);
+  const [trees,setTrees]=useState([]); const [loading,setLoad]=useState(true); const [search,setSrch]=useState(""); const [msg,setMsg]=useState("");
+  useEffect(()=>{ api("GET","/api/admin/trees").then(setTrees).finally(()=>setLoad(false)); }, []);
   const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),2500);};
   const toggleVis=async(id,current)=>{
     const next=current==="public"?"private":"public";
-    try{await api("PATCH",`/api/admin/trees/${id}`,{visibility:next});setTrees(ts=>ts.map(t=>t.id===id?{...t,visibility:next}:t));flash(`Tree set to ${next}`);}
-    catch(e){flash("Error: "+e.message);}
+    try{await api("PATCH",`/api/admin/trees/${id}`,{visibility:next});setTrees(ts=>ts.map(t=>t.id===id?{...t,visibility:next}:t));flash(`Set to ${next}`);}catch(e){flash("Error: "+e.message);}
   };
   const deleteTree=async(id,name)=>{
-    if(!window.confirm(`Delete tree "${name}"? All data lost.`))return;
-    try{await api("DELETE",`/api/admin/trees/${id}`);setTrees(ts=>ts.filter(t=>t.id!==id));flash("Tree deleted");}
-    catch(e){flash("Error: "+e.message);}
+    if(!window.confirm(`Delete "${name}"?`))return;
+    try{await api("DELETE",`/api/admin/trees/${id}`);setTrees(ts=>ts.filter(t=>t.id!==id));flash("Deleted");}catch(e){flash("Error: "+e.message);}
   };
   const filtered=trees.filter(t=>t.nameEn?.toLowerCase().includes(search.toLowerCase())||t.name?.toLowerCase().includes(search.toLowerCase())||t.owner?.name?.toLowerCase().includes(search.toLowerCase()));
   return(
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:14}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search trees…" style={{width:220,fontSize:12}}/>
-      </div>
-      {msg&&<div style={{background:"var(--color-background-success)",color:"var(--color-text-success)",padding:"7px 12px",borderRadius:"var(--border-radius-md)",fontSize:12,marginBottom:10}}>{msg}</div>}
-      {loading?<div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Loading trees…</div>:(
-        <div className="adm-table-wrap">
-          <table className="adm-table">
-            <thead><tr><th>Tree Name</th><th>Owner</th><th>Members</th><th>Visibility</th><th>Created</th><th>Actions</th></tr></thead>
+      <div style={{display:"flex",gap:8,marginBottom:14}}><input value={search} onChange={e=>setSrch(e.target.value)} placeholder="Search trees…" style={{width:220,fontSize:12}}/></div>
+      {msg&&<div style={{background:"#3fb95022",border:"1px solid #3fb950",color:"#3fb950",padding:"8px 12px",borderRadius:8,fontSize:12,marginBottom:10}}>{msg}</div>}
+      {loading?<div style={{textAlign:"center",padding:40,color:"#6e7681"}}>Loading…</div>:(
+        <div style={{border:"1px solid #30363d",borderRadius:12,overflow:"hidden",background:"#161b22"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead style={{background:"#0d1117"}}>
+              <tr>{["Tree","Owner","Members","Visibility","Created","Actions"].map(h=>(
+                <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#6e7681",textTransform:"uppercase",letterSpacing:0.5}}>{h}</th>
+              ))}</tr>
+            </thead>
             <tbody>
               {filtered.map(t=>(
-                <tr key={t.id}>
-                  <td><div style={{fontWeight:500,fontSize:12}}>{t.name}</div><div style={{fontSize:10,color:"var(--color-text-secondary)"}}>{t.nameEn}</div></td>
-                  <td><div style={{fontSize:11}}>{t.owner?.name}</div><div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.owner?.email}</div></td>
-                  <td style={{textAlign:"center",fontSize:12}}>{t._count?.persons||0}</td>
-                  <td><span style={{background:t.visibility==="public"?"var(--color-background-success)":"var(--color-background-secondary)",color:t.visibility==="public"?"var(--color-text-success)":"var(--color-text-secondary)",padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:600}}>{t.visibility}</span></td>
-                  <td style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.createdAt?.slice(0,10)}</td>
-                  <td>
+                <tr key={t.id} style={{borderTop:"1px solid #21262d"}}>
+                  <td style={{padding:"10px 12px"}}><div style={{fontWeight:600,color:"#e6edf3"}}>{t.name}</div><div style={{fontSize:10,color:"#6e7681"}}>{t.nameEn}</div></td>
+                  <td style={{padding:"10px 12px"}}><div style={{color:"#8b949e"}}>{t.owner?.name}</div><div style={{fontSize:10,color:"#6e7681"}}>{t.owner?.email}</div></td>
+                  <td style={{padding:"10px 12px",textAlign:"center",color:"#8b949e"}}>{t._count?.persons||0}</td>
+                  <td style={{padding:"10px 12px"}}>
+                    <span style={{background:t.visibility==="public"?"#3fb95022":"#30363d",color:t.visibility==="public"?"#3fb950":"#8b949e",border:`1px solid ${t.visibility==="public"?"#3fb950":"#484f58"}`,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:700}}>{t.visibility}</span>
+                  </td>
+                  <td style={{padding:"10px 12px",color:"#6e7681",fontSize:10}}>{t.createdAt?.slice(0,10)}</td>
+                  <td style={{padding:"10px 12px"}}>
                     <div style={{display:"flex",gap:4}}>
-                      <button className="adm-act-btn" title={`Set ${t.visibility==="public"?"private":"public"}`} onClick={()=>toggleVis(t.id,t.visibility)}><i className={`ti ti-${t.visibility==="public"?"lock":"world"}`} style={{fontSize:12}}/></button>
-                      <button className="adm-act-btn adm-del" title="Delete" onClick={()=>deleteTree(t.id,t.nameEn)}><i className="ti ti-trash" style={{fontSize:12}}/></button>
+                      <button onClick={()=>toggleVis(t.id,t.visibility)} title="Toggle visibility" style={{background:"#21262d",border:"1px solid #30363d",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"#8b949e",display:"inline-flex",alignItems:"center"}}>
+                        <i className={`ti ti-${t.visibility==="public"?"lock":"world"}`} style={{fontSize:12}}/>
+                      </button>
+                      <button onClick={()=>deleteTree(t.id,t.nameEn)} title="Delete" style={{background:"#21262d",border:"1px solid #30363d",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"#8b949e",display:"inline-flex",alignItems:"center"}}>
+                        <i className="ti ti-trash" style={{fontSize:12}}/>
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {filtered.length===0&&<div style={{textAlign:"center",padding:24,color:"var(--color-text-tertiary)",fontSize:12}}>No trees found</div>}
+          {filtered.length===0&&<div style={{textAlign:"center",padding:24,color:"#6e7681",fontSize:12}}>No trees found</div>}
         </div>
       )}
     </div>
   );
 }
 
-export default function AdminPanel({user,onBack}){
+// ── Main Admin Panel ──────────────────────────────────────
+export default function AdminPanel({user, onBack}){
   const [tab,setTab]=useState("overview");
-  const TABS=[{id:"overview",label:"Overview",icon:"ti-dashboard"},{id:"users",label:"Users",icon:"ti-users"},{id:"trees",label:"Trees",icon:"ti-binary-tree"}];
+  const TABS=[
+    {id:"overview",label:"Overview",  icon:"ti-dashboard"},
+    {id:"users",   label:"Users",     icon:"ti-users"},
+    {id:"trees",   label:"Trees",     icon:"ti-binary-tree"},
+    {id:"settings",label:"Settings",  icon:"ti-settings"},
+  ];
   return(
-    <div className="adm-wrap">
-      <style>{`
-        .adm-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--color-background-tertiary)}
-        .adm-header{background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary);padding:0 16px}
-        .adm-header-top{display:flex;align-items:center;gap:10px;padding:10px 0}
-        .adm-tabs{display:flex;gap:2px}
-        .adm-tab{padding:8px 14px;font-size:12px;font-weight:500;background:none;border:none;cursor:pointer;color:var(--color-text-secondary);border-bottom:2px solid transparent;display:flex;align-items:center;gap:5px}
-        .adm-tab:hover{color:var(--color-text-primary)}.adm-tab.active{color:var(--color-text-info);border-bottom-color:var(--color-border-info)}
-        .adm-body{flex:1;overflow-y:auto;padding:16px}
-        .adm-stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
-        .adm-stat{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px}
-        .adm-box{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px}
-        .adm-box-title{font-size:12px;font-weight:500;color:var(--color-text-secondary)}
-        .adm-table-wrap{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;background:var(--color-background-primary)}
-        .adm-table{width:100%;border-collapse:collapse;font-size:12px}
-        .adm-table thead{background:var(--color-background-secondary)}
-        .adm-table th{padding:9px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
-        .adm-table td{padding:9px 12px;border-top:0.5px solid var(--color-border-tertiary);vertical-align:middle}
-        .adm-table tr:hover td{background:var(--color-background-secondary)}
-        .adm-act-btn{background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:4px 7px;cursor:pointer;color:var(--color-text-secondary);display:inline-flex;align-items:center}
-        .adm-act-btn:hover{background:var(--color-background-tertiary)}.adm-del:hover{color:var(--color-text-danger);border-color:var(--color-border-danger)}
-        .ov{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px}
-        .mb{background:var(--color-background-primary);border-radius:var(--border-radius-lg);width:100%;max-width:400px;display:flex;flex-direction:column;max-height:90vh;overflow:hidden}
-        .mh{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:13px}
-        .mbd{padding:14px;overflow-y:auto;flex:1}.mf{padding:11px 14px;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:8px;justify-content:flex-end}
-        .fg{margin-bottom:9px}.fg label{display:block;font-size:10px;color:var(--color-text-secondary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:0.3px}
-        .iconbtn{background:none;border:none;cursor:pointer;color:var(--color-text-secondary);font-size:14px;padding:2px;display:flex;align-items:center}
-        .btn1{background:transparent;border:0.5px solid var(--color-border-info);color:var(--color-text-info);padding:6px 13px;border-radius:var(--border-radius-md);cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-        .btn1:hover{background:var(--color-background-info)}.btn1:disabled{opacity:.5;cursor:not-allowed}
-        .btn2{background:transparent;border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary);padding:6px 13px;border-radius:var(--border-radius-md);cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-        .btn2:hover{background:var(--color-background-secondary)}
-      `}</style>
-      <div className="adm-header">
-        <div className="adm-header-top">
-          <button className="btn2" style={{padding:"4px 9px",fontSize:11}} onClick={onBack}><i className="ti ti-chevron-left" style={{fontSize:10}}/>Back</button>
-          <i className="ti ti-shield-lock" style={{fontSize:16,color:"var(--color-text-info)"}}/>
-          <div><div style={{fontWeight:500,fontSize:14}}>Admin Panel</div><div style={{fontSize:10,color:"var(--color-text-secondary)"}}>వంశవృక్షం · {user.role}</div></div>
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}><RoleBadge role={user.role}/><span style={{fontSize:11,color:"var(--color-text-secondary)"}}>{user.name}</span></div>
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#0d1117"}}>
+      {/* Header */}
+      <div style={{background:"#161b22",borderBottom:"1px solid #30363d",padding:"0 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0"}}>
+          <button className="btn2" style={{padding:"4px 10px",fontSize:11}} onClick={onBack}><i className="ti ti-chevron-left" style={{fontSize:10}}/>Back</button>
+          <div style={{width:32,height:32,borderRadius:8,background:"#f8514922",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <i className="ti ti-shield-lock" style={{fontSize:16,color:"#f85149"}}/>
+          </div>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:"#e6edf3"}}>Admin Panel</div>
+            <div style={{fontSize:10,color:"#6e7681"}}>వంశవృక్షం · {user.role}</div>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+            <RoleBadge role={user.role}/>
+            <span style={{fontSize:11,color:"#8b949e"}}>{user.name}</span>
+          </div>
         </div>
-        <div className="adm-tabs">
-          {TABS.map(t=><button key={t.id} className={`adm-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}><i className={`ti ${t.icon}`} style={{fontSize:13}}/>{t.label}</button>)}
+        <div style={{display:"flex",gap:2}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",fontSize:12,fontWeight:600,background:"none",border:"none",cursor:"pointer",color:tab===t.id?"#3b82f6":"#8b949e",borderBottom:`2px solid ${tab===t.id?"#3b82f6":"transparent"}`,display:"flex",alignItems:"center",gap:5,transition:"all 0.15s"}}>
+              <i className={`ti ${t.icon}`} style={{fontSize:13}}/>{t.label}
+            </button>
+          ))}
         </div>
       </div>
-      <div className="adm-body">
-        {tab==="overview"&&<OverviewTab/>}
-        {tab==="users"   &&<UsersTab currentUser={user}/>}
-        {tab==="trees"   &&<TreesTab/>}
+      {/* Body */}
+      <div style={{flex:1,overflowY:"auto",padding:16}}>
+        <style>{`.ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px;backdrop-filter:blur(4px)}.mb{background:#161b22;border:1px solid #30363d;border-radius:12px;width:100%;max-width:420px;display:flex;flex-direction:column;max-height:90vh;overflow:hidden}.mh{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #30363d;font-size:14px;color:#e6edf3;font-weight:600}.mf{padding:12px 16px;border-top:1px solid #30363d;display:flex;gap:8px;justify-content:flex-end}.iconbtn{background:none;border:none;cursor:pointer;color:#8b949e;font-size:15px;padding:2px;display:flex;align-items:center}.btn1{background:linear-gradient(135deg,#1d4ed8,#7c3aed);border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.btn1:hover{opacity:0.9}.btn1:disabled{opacity:.4;cursor:not-allowed}.btn2{background:transparent;border:1px solid #30363d;color:#8b949e;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.btn2:hover{border-color:#8b949e;color:#e6edf3}input,select,textarea{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px 10px;color:#e6edf3;font-size:12px;outline:none;font-family:inherit}input:focus,select:focus,textarea:focus{border-color:#3b82f6}input::placeholder{color:#6e7681}select option{background:#1c2333}`}</style>
+        {tab==="overview" && <OverviewTab/>}
+        {tab==="users"    && <UsersTab currentUser={user}/>}
+        {tab==="trees"    && <TreesTab/>}
+        {tab==="settings" && <SettingsTab/>}
       </div>
     </div>
   );
