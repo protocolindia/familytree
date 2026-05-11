@@ -213,319 +213,387 @@ function hasParentInTree(pid, node) {
 }
 
 function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surnames, treeRootNode, onClose, onAdd }) {
-  const person   = persons[pid];
-  const isLocked = (rel) => LOCKED_ADD.includes(rel);
+  const person       = persons[pid];
   const parentExists = hasParentInTree(pid, treeRootNode);
 
-  const [rel,    setRel]    = useState("Child");
-  const [mode,   setMode]   = useState("new");
-  const [tab,    setTab]    = useState("basic");
-  const [exId,   setExId]   = useState("");
+  const [rel,       setRel]    = useState("Child");
+  const [tab,       setTab]    = useState("personal");
 
-  // Basic
-  const [nameEn,   setNameEn]   = useState("");
-  const [nickname, setNick]     = useState("");
-  const [gender,   setGender]   = useState("male");
-  const [childNo,  setChildNo]  = useState("1");
-  const [childNoTxt, setChildNoTxt] = useState("");
-  const [village,  setVil]      = useState(treeVillage||"");
-  const [surname,  setSur]      = useState(treeSurname||"");
+  // Personal fields
+  const [firstName, setFN]     = useState("");
+  const [fullname,  setFull]   = useState(treeSurname || "");
+  const [nickname,  setNick]   = useState("");
+  const [gender,    setGender] = useState("male");
+  const [childNo,   setChildNo]= useState("");
+  const [childNoTxt,setCNTxt]  = useState("");
+  const [isAlive,   setAlive]  = useState(true);
+  const [dobActual, setDobA]   = useState("");
+  const [dobRecords,setDobR]   = useState("");
+  const [marriageDate,setMD]   = useState("");
+  const [bloodGroup,setBG]     = useState("");
+  const [dateOfDeath,setDod]   = useState("");
+  const [selVil,    setSelVil] = useState("");
+  const [selSur,    setSelSur] = useState("");
 
   // Biographical
-  const [dobActual,  setDobActual]  = useState("");
-  const [dobRecords, setDobRecords] = useState("");
-  const [isAlive,    setIsAlive]    = useState(true);
-  const [dateOfDeath,setDod]        = useState("");
-  const [education,  setEdu]        = useState("");
-  const [occupation, setOcc]        = useState("");
+  const [education, setEdu]    = useState("");
+  const [occupation,setOcc]    = useState("");
 
   // Contact
-  const [phone,   setPhone]   = useState("");
-  const [email,   setEmail]   = useState("");
-  const [address, setAddr]    = useState("");
-  const [notes,   setNotes]   = useState("");
+  const [phone,     setPhone]  = useState("");
+  const [email,     setEmail]  = useState("");
+  const [address,   setAddr]   = useState("");
+  const [notes,     setNotes]  = useState("");
 
-  // Photos
-  const [photo,   setPhoto]   = useState(null);
-  const [avatar,  setAvatar]  = useState("");
+  // Pictures
+  const [photo,     setPhoto]  = useState("");
+  const [avatar,    setAvatar] = useState("");
   const fileRef = useRef();
 
-  // Auto-set gender + village/surname when relation changes
-  useEffect(() => {
-    if (rel === "Sister")                              setGender("female");
-    else if (rel === "Brother")                        setGender("male");
-    else if (rel === "Partner" || rel === "Ex-Partner") setGender(person?.gender === "male" ? "female" : "male");
-    else setGender("male");
+  const locked      = LOCKED_ADD.includes(rel);
+  const isPartner   = PARTNER_ADD.includes(rel);
+  const showChildNo = ["Child","Brother","Sister"].includes(rel);
+  const genderFixed = rel === "Brother" || rel === "Sister";
 
-    if (LOCKED_ADD.includes(rel)) { setVil(treeVillage||""); setSur(treeSurname||""); }
-    else if (PARTNER_ADD.includes(rel)) { setVil(""); setSur(""); }
-    setAvatar("");
+  // Auto-set when relation changes
+  useEffect(() => {
+    if      (rel === "Brother")                setGender("male");
+    else if (rel === "Sister")                 setGender("female");
+    else if (isPartner) setGender(person?.gender === "male" ? "female" : "male");
+    else    setGender("male");
+    setChildNo(""); setAvatar("");
+    if (locked) setFull(treeSurname || "");
+    else        setFull("");
   }, [rel]);
 
-  const onPhoto = e => {
+  // Auto-update fullname when firstName changes for locked rels
+  useEffect(() => {
+    if (!locked) return;
+    setFull(firstName ? `${firstName} ${treeSurname || ""}`.trim() : treeSurname || "");
+  }, [firstName, locked, treeSurname]);
+
+  // Get used child numbers for siblings of pid
+  const usedChildNums = (() => {
+    const findNode = (node, id) => {
+      if (!node) return null;
+      if (node.id === id) return node;
+      for (const c of (node.children || [])) { const r = findNode(c, id); if (r) return r; }
+      return null;
+    };
+    const pidNode = findNode(treeRootNode, pid);
+    return (pidNode?.children || []).map(c => persons[c.id]?.childNumber).filter(Boolean);
+  })();
+
+  const onPhotoFile = e => {
     const f = e.target.files[0]; if (!f) return;
-    const r = new FileReader(); r.onload = ev => { setPhoto(ev.target.result); setAvatar(""); }; r.readAsDataURL(f);
+    const r = new FileReader();
+    r.onload = ev => { setPhoto(ev.target.result); setAvatar(""); };
+    r.readAsDataURL(f);
   };
-
-  const locked = isLocked(rel);
-  const showChildNo = locked; // Child, Brother, Sister
-  const showVilSur  = true;   // always show, but locked or dropdown
-
-  const TABS = [
-    { id:"basic",  label:"Basic",       icon:"ti-user" },
-    { id:"bio",    label:"Biographical",icon:"ti-calendar" },
-    { id:"contact",label:"Contact",     icon:"ti-phone" },
-    { id:"photos", label:"Photos",      icon:"ti-photo" },
-  ];
 
   const submit = () => {
-    if (mode === "existing") { if (!exId) return; onAdd({ rel, mode:"existing", pid, exId }); return; }
-    if (!nameEn.trim()) return;
-    const childNumber = childNo === "other" ? childNoTxt : childNo;
-    onAdd({ rel, mode:"new", pid, nameEn, nickname, gender, childNumber,
-      village: locked ? (treeVillage||"") : village,
-      surname: locked ? (treeSurname||"") : surname,
-      dobActual, dobRecords, isAlive, dateOfDeath, education, occupation,
-      phone, email, address, notes, photo: photo||"", avatar });
+    const name = fullname?.trim() || firstName?.trim();
+    if (!name) return;
+    const childNumber = childNo === ">9" ? childNoTxt : childNo;
+    onAdd({ rel, pid,
+      nameEn: name, firstName, nickname, gender, childNumber,
+      village: locked ? treeVillage : selVil,
+      surname: locked ? treeSurname : selSur,
+      isAlive, dobActual, dobRecords, marriageDate, bloodGroup, dateOfDeath,
+      education, occupation, phone, email, address, notes, photo, avatar });
   };
 
-  const fieldRow = (label, children, hint) => (
-    <div className="fg" style={{ marginBottom:10 }}>
-      <label style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span>{label}</span>{hint && <span style={{fontSize:9,color:"var(--text3)",fontWeight:400}}>{hint}</span>}
-      </label>
+  // ── Sub-components ───────────────────────────────────────
+  const TI = ({ value, onChange, placeholder = "", disabled = false, type = "text" }) => (
+    <input type={type} value={value || ""} onChange={e => onChange && onChange(e.target.value)}
+      placeholder={placeholder} disabled={disabled}
+      style={{ width:"100%", padding:"8px 12px", border:"1px solid #d1d5db", borderRadius:8,
+        fontSize:12, background:disabled?"#f3f4f6":"#fff", color:disabled?"#6b7280":"#111827",
+        outline:"none", boxSizing:"border-box" }} />
+  );
+
+  const FL = ({ label, children, style={} }) => (
+    <div style={{ marginBottom:14, ...style }}>
+      <div style={{ fontSize:12, fontWeight:500, color:"#374151", marginBottom:5 }}>{label}</div>
       {children}
     </div>
   );
 
+  const TABS = [
+    { id:"personal",     label:"Personal" },
+    { id:"contact",      label:"Contact" },
+    { id:"biographical", label:"Biographical" },
+    { id:"pictures",     label:"Pictures" },
+  ];
+
   return (
     <div className="ov" onClick={onClose}>
-      <div className="mb" style={{ maxWidth:520, maxHeight:"92vh" }} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="mh" style={{ flexDirection:"column", alignItems:"flex-start", gap:10 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <i className="ti ti-users-plus" style={{ fontSize:16, color:"var(--accent)" }} />
-              <span>Add Relation · <strong style={{ color:"var(--accent)" }}>{person?.nameEn}</strong></span>
-            </div>
-            <button onClick={onClose} className="iconbtn">✕</button>
-          </div>
+      <div style={{ background:"#fff", borderRadius:14, width:"96%", maxWidth:700, maxHeight:"94vh",
+        display:"flex", flexDirection:"column", overflow:"hidden",
+        boxShadow:"0 25px 60px rgba(0,0,0,0.35)", color:"#111827" }}
+        onClick={e => e.stopPropagation()}>
 
-          {/* Relation selector */}
-          <div style={{ display:"flex", gap:5, flexWrap:"wrap", width:"100%" }}>
-            {ADD_RELS.map(r => {
-              const disabled = r === "Parent" && parentExists;
-              return (
-                <button key={r} onClick={() => !disabled && setRel(r)}
-                  disabled={disabled}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:disabled?"not-allowed":"pointer", border:`1px solid ${rel===r?"var(--accent)":"var(--border)"}`,
-                    background: rel===r ? "var(--accent-bg)" : "transparent",
-                    color: disabled ? "var(--text3)" : rel===r ? "var(--accent)" : "var(--text2)",
-                    opacity: disabled ? 0.5 : 1, transition:"all 0.15s" }}>
-                  {r}{disabled?" (has parent)":""}
-                </button>
-              );
-            })}
+        {/* ── Header ── */}
+        <div style={{ padding:"14px 20px", borderBottom:"1px solid #e5e7eb",
+          display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+          <div style={{ fontWeight:700, fontSize:15 }}>
+            Add Relation · <span style={{ color:"#6366f1" }}>{person?.nameEn}</span>
           </div>
-
-          {/* New / Existing */}
-          <div style={{ display:"flex", gap:6 }}>
-            <button className={mode==="new"?"btn1":"btn2"} style={{ padding:"4px 12px", fontSize:11 }} onClick={() => setMode("new")}>New Person</button>
-            <button className={mode==="existing"?"btn1":"btn2"} style={{ padding:"4px 12px", fontSize:11 }} onClick={() => setMode("existing")}>Existing Member</button>
-          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, color:"#9ca3af", lineHeight:1 }}>✕</button>
         </div>
 
-        {/* Existing member select */}
-        {mode === "existing" ? (
-          <div style={{ padding:16 }}>
-            <div className="fg"><label>Select Member</label>
-              <select value={exId} onChange={e => setExId(e.target.value)} style={{ width:"100%", fontSize:12 }}>
-                <option value="">-- Select --</option>
-                {Object.values(persons).filter(x => x.id !== pid).map(x => <option key={x.id} value={x.id}>{x.nameEn} ({x.name||""})</option>)}
-              </select>
+        {/* ── Relation type buttons ── */}
+        <div style={{ padding:"12px 20px 0", display:"flex", gap:8, flexWrap:"wrap", flexShrink:0 }}>
+          {ADD_RELS.map(r => {
+            const dis = r === "Parent" && parentExists;
+            return (
+              <button key={r} disabled={dis} onClick={() => !dis && setRel(r)}
+                style={{ padding:"6px 18px", borderRadius:20, fontSize:12, fontWeight:600,
+                  cursor: dis ? "not-allowed" : "pointer",
+                  border:`1.5px solid ${rel===r?"#6366f1":"#d1d5db"}`,
+                  background: rel===r ? "#6366f1" : "#fff",
+                  color: rel===r ? "#fff" : dis ? "#9ca3af" : "#374151",
+                  opacity: dis ? 0.5 : 1, transition:"all 0.15s" }}>
+                {r}{dis ? " ✓" : ""}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Tabs ── */}
+        <div style={{ display:"flex", borderBottom:"1px solid #e5e7eb", padding:"0 20px",
+          marginTop:10, flexShrink:0 }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding:"9px 18px", fontSize:12, fontWeight:600, cursor:"pointer",
+                background: tab===t.id ? "#6366f1" : "transparent",
+                color: tab===t.id ? "#fff" : "#9ca3af",
+                border:"none", borderRadius:"8px 8px 0 0", marginRight:2,
+                transition:"all 0.15s" }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Tab content ── */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+
+          {/* ══ PERSONAL TAB ══ */}
+          {tab === "personal" && <>
+
+            {/* Row 1: Village | Surname | Relation Type */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+              <FL label="Village">
+                {locked
+                  ? <TI value={treeVillage} disabled/>
+                  : <select value={selVil} onChange={e=>setSelVil(e.target.value)}
+                      style={{width:"100%",padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,outline:"none",background:"#fff"}}>
+                      <option value="">-- Select --</option>
+                      {villages.map(v=><option key={v.id} value={v.name}>{v.name}</option>)}
+                    </select>}
+              </FL>
+              <FL label="Surname">
+                {locked
+                  ? <TI value={treeSurname} disabled/>
+                  : <select value={selSur} onChange={e=>setSelSur(e.target.value)}
+                      style={{width:"100%",padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,outline:"none",background:"#fff"}}>
+                      <option value="">-- Select --</option>
+                      {surnames.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>}
+              </FL>
+              <FL label="Relation Type"><TI value={rel} disabled/></FL>
             </div>
-          </div>
-        ) : (
-          <>
-            {/* Tabs */}
-            <div style={{ display:"flex", borderBottom:"1px solid var(--border)", background:"var(--bg3)" }}>
-              {TABS.map(t => (
-                <button key={t.id} onClick={() => setTab(t.id)}
-                  style={{ flex:1, padding:"8px 4px", fontSize:11, fontWeight:600, background:"transparent", border:"none",
-                    cursor:"pointer", color: tab===t.id ? "var(--accent)" : "var(--text3)",
-                    borderBottom: `2px solid ${tab===t.id ? "var(--accent)" : "transparent"}`,
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:4, transition:"all 0.15s" }}>
-                  <i className={`ti ${t.icon}`} style={{ fontSize:12 }} />{t.label}
-                </button>
-              ))}
+
+            {/* Child Number */}
+            {showChildNo && (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:12, fontWeight:500, color:"#374151", marginBottom:8 }}>Child No</div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {[1,2,3,4,5,6,7,8,9].map(n => {
+                    const used   = usedChildNums.includes(String(n));
+                    const active = childNo === String(n);
+                    return (
+                      <button key={n} disabled={used} onClick={() => setChildNo(active ? "" : String(n))}
+                        style={{ width:40, height:40, borderRadius:8, fontWeight:700, fontSize:13,
+                          cursor: used ? "not-allowed" : "pointer",
+                          border:`1.5px solid ${used?"#e5e7eb":"#10b981"}`,
+                          background: active ? "#10b981" : "#fff",
+                          color: active ? "#fff" : used ? "#d1d5db" : "#10b981",
+                          opacity: used ? 0.5 : 1, transition:"all 0.15s" }}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setChildNo(childNo===">9" ? "" : ">9")}
+                    style={{ padding:"0 14px", height:40, borderRadius:8, fontWeight:700, fontSize:13, cursor:"pointer",
+                      border:`1.5px solid #10b981`,
+                      background: childNo===">9" ? "#10b981" : "#fff",
+                      color: childNo===">9" ? "#fff" : "#10b981", transition:"all 0.15s" }}>
+                    &gt;9
+                  </button>
+                </div>
+                {childNo === ">9" && (
+                  <div style={{ marginTop:10 }}>
+                    <div style={{ fontSize:12, fontWeight:500, color:"#374151", marginBottom:4 }}>Child No Greater Than 9</div>
+                    <TI value={childNoTxt} onChange={setCNTxt} placeholder="Enter Child No"/>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Row: First Name | Fullname | Nickname */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+              <FL label="First Name:">
+                <TI value={firstName}
+                  onChange={v => { setFN(v); if (locked) setFull(`${v} ${treeSurname||""}`.trim()); }}
+                  placeholder="Enter first name"/>
+              </FL>
+              <FL label="Fullname">
+                <TI value={fullname} onChange={setFull} placeholder="Full name"/>
+              </FL>
+              <FL label="Nickname">
+                <TI value={nickname} onChange={setNick} placeholder="Enter Nickname"/>
+              </FL>
             </div>
 
-            <div style={{ padding:14, overflowY:"auto", flex:1, maxHeight:360 }}>
-
-              {/* ── BASIC TAB ── */}
-              {tab === "basic" && (
-                <div>
-                  {/* Gender */}
-                  <div className="fg">
-                    <label>Gender</label>
-                    <div style={{ display:"flex", gap:6 }}>
-                      {[["male","♂ Male","#3b82f6"],["female","♀ Female","#ec4899"]].map(([v,l,c]) => (
-                        <button key={v} onClick={() => (rel==="Child"||rel==="Parent"||rel==="Partner"||rel==="Ex-Partner") && setGender(v)}
-                          style={{ flex:1, padding:"7px", fontSize:12, fontWeight:600, borderRadius:8, cursor:(rel==="Child"||rel==="Parent")?"pointer":"default",
-                            background:gender===v?`${c}22`:"transparent", border:`1px solid ${gender===v?c:"var(--border)"}`,
-                            color:gender===v?c:"var(--text2)", opacity:(rel==="Brother"||rel==="Sister")?0.6:1 }}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                    {(rel==="Brother"||rel==="Sister") && <div style={{fontSize:9,color:"var(--text3)",marginTop:3}}>Auto-set for {rel} (cannot change)</div>}
-                  </div>
-
-                  {/* English Name */}
-                  {fieldRow("English Name", <input value={nameEn} onChange={e=>setNameEn(e.target.value)} placeholder="Full name in English" style={{width:"100%",fontSize:12}}/>)}
-
-                  {/* Nickname */}
-                  {fieldRow("Nickname", <input value={nickname} onChange={e=>setNick(e.target.value)} placeholder="Nickname or alias (optional)" style={{width:"100%",fontSize:12}}/>, "optional")}
-
-                  {/* Child Number */}
-                  {showChildNo && (
-                    <div className="fg">
-                      <label>Child Number <span style={{fontSize:9,color:"var(--text3)",fontWeight:400}}>(birth order)</span></label>
-                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                        <select value={childNo} onChange={e=>setChildNo(e.target.value)} style={{fontSize:12,width:120,flexShrink:0}}>
-                          {[1,2,3,4,5,6,7,8,9].map(n=><option key={n} value={String(n)}>{n}{n===1?" (1st)":n===2?" (2nd)":n===3?" (3rd)":" th"}</option>)}
-                          <option value="other">Other (type below)</option>
-                        </select>
-                        {childNo === "other" && <input value={childNoTxt} onChange={e=>setChildNoTxt(e.target.value)} placeholder="Enter number" style={{flex:1,fontSize:12}}/>}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Village */}
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                    <div className="fg">
-                      <label>Village / గ్రామం</label>
-                      {locked ? (
-                        <div className="locked-field"><i className="ti ti-lock" style={{fontSize:11,color:"var(--text3)",marginRight:4}}/>{treeVillage||"—"}</div>
-                      ) : (
-                        <select value={village} onChange={e=>setVil(e.target.value)} style={{width:"100%",fontSize:12}}>
-                          <option value="">-- Select --</option>
-                          {villages.map(v=><option key={v.id} value={v.name}>{v.name}</option>)}
-                        </select>
-                      )}
-                    </div>
-                    <div className="fg">
-                      <label>Surname / ఇంటిపేరు</label>
-                      {locked ? (
-                        <div className="locked-field"><i className="ti ti-lock" style={{fontSize:11,color:"var(--text3)",marginRight:4}}/>{treeSurname||"—"}</div>
-                      ) : (
-                        <select value={surname} onChange={e=>setSur(e.target.value)} style={{width:"100%",fontSize:12}}>
-                          <option value="">-- Select --</option>
-                          {surnames.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
-                        </select>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Lock info */}
-                  {locked && <div style={{background:"#3b82f622",border:"1px solid #3b82f644",borderRadius:8,padding:"6px 10px",fontSize:10,color:"var(--accent-text)",marginTop:2}}>
-                    <i className="ti ti-lock" style={{fontSize:10,marginRight:4}}/>Blood relation — Village and Surname inherited from this family
-                  </div>}
-                  {PARTNER_ADD.includes(rel) && <div style={{background:"#ec489922",border:"1px solid #ec489944",borderRadius:8,padding:"6px 10px",fontSize:10,color:"#f9a8d4",marginTop:2}}>
-                    <i className="ti ti-heart" style={{fontSize:10,marginRight:4}}/>Partner — select their village and surname above
-                  </div>}
+            {/* Row: Gender radios + Alive toggle */}
+            <div style={{ display:"flex", alignItems:"center", gap:28, marginBottom:14, flexWrap:"wrap" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+                {["female","male"].map(v => (
+                  <label key={v} style={{ display:"flex", alignItems:"center", gap:6, cursor:genderFixed?"default":"pointer", fontSize:13 }}>
+                    <input type="radio" name="gender" value={v} checked={gender===v}
+                      onChange={() => !genderFixed && setGender(v)} disabled={genderFixed}
+                      style={{ accentColor:"#6366f1", width:15, height:15 }}/>
+                    {v === "female" ? "Female" : "Male"}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div onClick={() => setAlive(v => !v)}
+                  style={{ width:46, height:26, borderRadius:13, background:isAlive?"#6366f1":"#d1d5db",
+                    cursor:"pointer", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
+                  <div style={{ position:"absolute", top:3, left:isAlive?21:3, width:20, height:20,
+                    borderRadius:"50%", background:"#fff", transition:"left 0.2s",
+                    boxShadow:"0 1px 3px rgba(0,0,0,0.25)" }}/>
                 </div>
-              )}
-
-              {/* ── BIOGRAPHICAL TAB ── */}
-              {tab === "bio" && (
-                <div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                    {fieldRow("Date of Birth (Actual)", <input type="date" value={dobActual} onChange={e=>setDobActual(e.target.value)} style={{width:"100%",fontSize:12}}/>)}
-                    {fieldRow("Date of Birth (As per Records)", <input type="date" value={dobRecords} onChange={e=>setDobRecords(e.target.value)} style={{width:"100%",fontSize:12}}/>, "approx.")}
-                  </div>
-
-                  <div className="fg">
-                    <label>Living Status</label>
-                    <div style={{ display:"flex", gap:8 }}>
-                      {[["true","✅ Living","#10b981"],["false","✝ Deceased","#6e7681"]].map(([v,l,c]) => (
-                        <button key={v} onClick={() => setIsAlive(v==="true")}
-                          style={{ flex:1, padding:"7px", fontSize:12, fontWeight:600, borderRadius:8, cursor:"pointer",
-                            background:String(isAlive)===v?`${c}22`:"transparent", border:`1px solid ${String(isAlive)===v?c:"var(--border)"}`,
-                            color:String(isAlive)===v?c:"var(--text2)" }}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {!isAlive && fieldRow("Date of Death", <input type="date" value={dateOfDeath} onChange={e=>setDod(e.target.value)} style={{width:"100%",fontSize:12}}/>)}
-
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                    {fieldRow("Education", <input value={education} onChange={e=>setEdu(e.target.value)} placeholder="e.g. B.Tech, M.A." style={{width:"100%",fontSize:12}}/>)}
-                    {fieldRow("Occupation", <input value={occupation} onChange={e=>setOcc(e.target.value)} placeholder="Job / Profession" style={{width:"100%",fontSize:12}}/>)}
-                  </div>
-                </div>
-              )}
-
-              {/* ── CONTACT TAB ── */}
-              {tab === "contact" && (
-                <div>
-                  {fieldRow("Phone Number", <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+91 99999 99999" style={{width:"100%",fontSize:12}} type="tel"/>)}
-                  {fieldRow("Email Address", <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@example.com" style={{width:"100%",fontSize:12}} type="email"/>)}
-                  {fieldRow("Address", <textarea value={address} onChange={e=>setAddr(e.target.value)} placeholder="House / Street / City / State" rows={3} style={{width:"100%",fontSize:12,resize:"vertical"}}/>)}
-                  {fieldRow("Notes / వివరాలు", <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional information…" rows={2} style={{width:"100%",fontSize:12}}/>)}
-                </div>
-              )}
-
-              {/* ── PHOTOS TAB ── */}
-              {tab === "photos" && (
-                <div>
-                  <div className="fg">
-                    <label>Upload Photo</label>
-                    <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
-                      {/* Preview */}
-                      <div style={{ width:72, height:72, borderRadius:"50%", border:"2px solid var(--border)", overflow:"hidden", flexShrink:0, background:"var(--bg3)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        {photo ? <img src={photo} style={{width:"100%",height:"100%",objectFit:"cover"}}/> :
-                          avatar ? <i className="ti ti-user-circle" style={{fontSize:32,color:gender==="female"?"#ec4899":"#3b82f6"}}/> :
-                          <i className="ti ti-user" style={{fontSize:28,color:"var(--text3)"}}/>}
-                      </div>
-                      <div style={{ flex:1 }}>
-                        <button className="btn2" style={{ width:"100%", marginBottom:6, justifyContent:"center" }} onClick={() => fileRef.current.click()}>
-                          <i className="ti ti-upload" style={{fontSize:12,marginRight:5}}/>Upload Photo
-                        </button>
-                        {photo && <button className="btn2" style={{ width:"100%", justifyContent:"center", fontSize:10 }} onClick={() => setPhoto(null)}>
-                          <i className="ti ti-trash" style={{fontSize:10,marginRight:4}}/>Remove Photo
-                        </button>}
-                        <input type="file" accept="image/*" ref={fileRef} style={{display:"none"}} onChange={onPhoto}/>
-                      </div>
-                    </div>
-                  </div>
-
-                  {!photo && (
-                    <div className="fg">
-                      <label>Or Choose Avatar</label>
-                      <AvatarPicker gender={gender} selected={avatar} onSelect={setAvatar}/>
-                    </div>
-                  )}
-                </div>
-              )}
-
+                <span style={{ fontSize:13, color:"#374151" }}>This person is alive</span>
+              </div>
             </div>
-          </>
-        )}
 
-        {/* Footer */}
-        <div className="mf">
-          <button className="btn2" onClick={onClose}>Cancel</button>
-          <button className="btn1" onClick={submit} disabled={mode==="new"&&!nameEn.trim()}>
-            <i className="ti ti-user-plus" style={{fontSize:12,marginRight:4}}/>Add {rel}
+            {/* Dates + Blood Group row */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginBottom:14 }}>
+              <FL label="Actual Birth Date:">
+                <input type="date" value={dobActual} onChange={e=>setDobA(e.target.value)}
+                  style={{width:"100%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:8,fontSize:11,outline:"none",color:"#374151"}}/>
+              </FL>
+              <FL label="Birth Date (As Per ID):">
+                <input type="date" value={dobRecords} onChange={e=>setDobR(e.target.value)}
+                  style={{width:"100%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:8,fontSize:11,outline:"none",color:"#374151"}}/>
+              </FL>
+              <FL label="Marriage Date:">
+                <input type="date" value={marriageDate} onChange={e=>setMD(e.target.value)}
+                  style={{width:"100%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:8,fontSize:11,outline:"none",color:"#374151"}}/>
+              </FL>
+              <FL label="Blood Group">
+                <select value={bloodGroup} onChange={e=>setBG(e.target.value)}
+                  style={{width:"100%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,outline:"none",background:"#fff",color:"#374151"}}>
+                  <option value="">--select--</option>
+                  {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(g=><option key={g}>{g}</option>)}
+                </select>
+              </FL>
+            </div>
+
+            {/* Date of Death (if deceased) */}
+            {!isAlive && (
+              <FL label="Date of Death">
+                <input type="date" value={dateOfDeath} onChange={e=>setDod(e.target.value)}
+                  style={{width:"50%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,outline:"none"}}/>
+              </FL>
+            )}
+
+            {/* Photo URL */}
+            <FL label="Photo:">
+              <TI value={photo.startsWith?.("data:") ? "(uploaded)" : photo} onChange={v=>!v.startsWith?.("data:")&&setPhoto(v)} placeholder="Enter Photo URL"/>
+            </FL>
+          </>}
+
+          {/* ══ CONTACT TAB ══ */}
+          {tab === "contact" && <>
+            <FL label="Phone Number"><TI value={phone} onChange={setPhone} placeholder="+91 99999 99999" type="tel"/></FL>
+            <FL label="Email Address"><TI value={email} onChange={setEmail} placeholder="email@example.com" type="email"/></FL>
+            <FL label="Address">
+              <textarea value={address} onChange={e=>setAddr(e.target.value)} placeholder="House / Street / City / State" rows={3}
+                style={{width:"100%",padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,resize:"vertical",outline:"none",fontFamily:"inherit"}}/>
+            </FL>
+            <FL label="Notes">
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional information…" rows={3}
+                style={{width:"100%",padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,resize:"vertical",outline:"none",fontFamily:"inherit"}}/>
+            </FL>
+          </>}
+
+          {/* ══ BIOGRAPHICAL TAB ══ */}
+          {tab === "biographical" && <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <FL label="Education"><TI value={education} onChange={setEdu} placeholder="e.g. B.Tech, M.A."/></FL>
+              <FL label="Occupation"><TI value={occupation} onChange={setOcc} placeholder="Job / Profession"/></FL>
+            </div>
+            <FL label="Notes / Bio">
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional biographical information…" rows={4}
+                style={{width:"100%",padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,resize:"vertical",outline:"none",fontFamily:"inherit"}}/>
+            </FL>
+          </>}
+
+          {/* ══ PICTURES TAB ══ */}
+          {tab === "pictures" && <>
+            <FL label="Upload Photo">
+              <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+                <div style={{width:90,height:90,borderRadius:"50%",border:"2px solid #e5e7eb",overflow:"hidden",flexShrink:0,background:"#f9fafb",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {photo && photo.startsWith("data:")
+                    ? <img src={photo} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+                    : <i className="ti ti-user" style={{fontSize:38,color:"#d1d5db"}}/>}
+                </div>
+                <div style={{flex:1}}>
+                  <button onClick={()=>fileRef.current?.click()}
+                    style={{width:"100%",padding:"9px",border:"1.5px solid #6366f1",borderRadius:8,background:"#fff",color:"#6366f1",cursor:"pointer",fontWeight:600,fontSize:12,marginBottom:8}}>
+                    <i className="ti ti-upload" style={{marginRight:6}}/>Upload Photo
+                  </button>
+                  {photo && <button onClick={()=>setPhoto("")}
+                    style={{width:"100%",padding:"7px",border:"1px solid #e5e7eb",borderRadius:8,background:"#fff",color:"#6b7280",cursor:"pointer",fontSize:11}}>
+                    Remove Photo
+                  </button>}
+                  <input type="file" accept="image/*" ref={fileRef} style={{display:"none"}} onChange={onPhotoFile}/>
+                  <div style={{fontSize:10,color:"#9ca3af",marginTop:6}}>PNG, JPG, JPEG up to 5MB</div>
+                </div>
+              </div>
+            </FL>
+            {!photo && (
+              <FL label="Or Choose Avatar Color">
+                <AvatarPicker gender={gender} selected={avatar} onSelect={setAvatar}/>
+              </FL>
+            )}
+          </>}
+
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{ padding:"12px 20px", borderTop:"1px solid #e5e7eb",
+          display:"flex", gap:10, justifyContent:"flex-end", flexShrink:0 }}>
+          <button onClick={onClose}
+            style={{padding:"9px 24px",border:"1px solid #d1d5db",borderRadius:8,background:"#fff",cursor:"pointer",fontSize:12,fontWeight:500,color:"#374151"}}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={!fullname?.trim() && !firstName?.trim()}
+            style={{padding:"9px 24px",border:"none",borderRadius:8,background:"#6366f1",color:"#fff",
+              cursor:(!fullname?.trim()&&!firstName?.trim())?"not-allowed":"pointer",fontSize:12,fontWeight:600,
+              opacity:(!fullname?.trim()&&!firstName?.trim())?0.5:1}}>
+            <i className="ti ti-user-plus" style={{marginRight:6}}/>Add {rel}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
 
 // ─────────────────────────────────────────────────────────
 // PERSON EDIT PANEL — tabbed
@@ -809,43 +877,70 @@ function TreeEditor({ tree, setTree, onBack }) {
 
   const openEdit = id => { setSelP(id); setPanel(true); };
 
-  const addRel = ({ rel, mode, pid, exId,
-      nameEn, nickname, gender, childNumber,
+  const addRel = ({ rel, pid, exId,
+      nameEn, firstName, nickname, gender, childNumber,
       village, surname, dobActual, dobRecords,
-      isAlive, dateOfDeath, education, occupation,
+      isAlive, dateOfDeath, marriageDate, bloodGroup,
+      education, occupation,
       phone, email, address, notes, photo, avatar }) => {
-    if (mode === "new"      && !nameEn?.trim()) return;
-    if (mode === "existing" && !exId)           return;
+    const name = nameEn?.trim() || firstName?.trim();
+    if (!name && !exId) return;
     const isPartner = PARTNER_ADD.includes(rel);
+    const isParent  = rel === "Parent";
     setTree(t => {
       const nid     = "px" + Date.now();
       const counter = (t.memberCounter || Object.keys(t.persons).length) + 1;
       const newPerson = {
-        id: nid, name: nameEn, nameEn, nickname: nickname||"",
+        id: nid, nameEn: name||"", name: name||"",
+        firstName: firstName||"", nickname: nickname||"",
         gender: gender||"male", childNumber: childNumber||"",
         education: education||"", occupation: occupation||"",
         village: village||"", surname: surname||"",
         dobActual: dobActual||"", dobRecords: dobRecords||"",
-        isAlive: isAlive !== false,
-        dateOfDeath: dateOfDeath||"",
+        isAlive: isAlive !== false, dateOfDeath: dateOfDeath||"",
+        marriageDate: marriageDate||"", bloodGroup: bloodGroup||"",
         phone: phone||"", email: email||"", address: address||"",
         notes: notes||"", photo: photo||"", avatar: avatar||"",
         spouseId: isPartner ? pid : null,
         memberNo: counter,
       };
-      const np  = mode === "new" ? { ...t.persons, [nid]: newPerson } : t.persons;
-      const tid = mode === "new" ? nid : exId;
+      const np  = exId ? t.persons : { ...t.persons, [nid]: newPerson };
+      const tid = exId || nid;
+
+      // ── Partner: link as spouse ──────────────────────────
       if (isPartner) {
         return { ...t,
-          persons: { ...np, [pid]: {...(np[pid]||t.persons[pid]), spouseId:tid}, [tid]: {...(np[tid]||{}), spouseId:pid} },
-          members: (t.members||0) + (mode==="new"?1:0), memberCounter: counter };
+          persons: { ...np,
+            [pid]: { ...(np[pid]||t.persons[pid]), spouseId: tid },
+            [tid]: { ...(np[tid]||{}),             spouseId: pid } },
+          members: (t.members||0) + (exId?0:1), memberCounter: counter };
       }
-      const addC = n => n.id === pid
+
+      // ── Parent: new person becomes parent of pid ─────────
+      if (isParent) {
+        const newRoot = t.rootNode?.id === pid
+          ? { id: tid, children: [t.rootNode] }
+          : (() => {
+              const wrap = node => {
+                if (!node) return node;
+                const ch = node.children || [];
+                if (ch.some(c => c.id === pid))
+                  return { ...node, children: ch.map(c => c.id===pid ? {id:tid,children:[c]} : c) };
+                return { ...node, children: ch.map(wrap) };
+              };
+              return wrap(t.rootNode);
+            })();
+        return { ...t, persons: np, rootNode: newRoot,
+          members: (t.members||0)+(exId?0:1), memberCounter: counter };
+      }
+
+      // ── Child / Brother / Sister: add as child of pid ────
+      const addC = n => n.id===pid
         ? { ...n, children: [...(n.children||[]), {id:tid,children:[]}] }
         : n.children ? { ...n, children: n.children.map(addC) } : n;
       return { ...t, persons: np,
         rootNode: t.rootNode ? addC(t.rootNode) : {id:tid,children:[]},
-        members: (t.members||0) + (mode==="new"?1:0), memberCounter: counter };
+        members: (t.members||0)+(exId?0:1), memberCounter: counter };
     });
     setShowRel(false);
   };
