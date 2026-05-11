@@ -62,7 +62,7 @@ const DEMO = { id:"demo",name:"Kotrapalli_Krishna_1",nameEn:"Kotrapalli_Krishna_
 // ─────────────────────────────────────────────────────────
 // PERSON CARD (matches reference design)
 // ─────────────────────────────────────────────────────────
-function PersonCard({ person, selected, onClick, onEdit, onDelete, onAdd, depth }) {
+function PersonCard({ person, selected, onClick, onEdit, onDelete, onAdd, onLinkTree, depth, isSpouse=false }) {
   if (!person) return null;
   const isFemale = person.gender === "female";
   const ringColor = isFemale ? "#ec4899" : GEN_COLORS[depth % GEN_COLORS.length];
@@ -109,9 +109,17 @@ function PersonCard({ person, selected, onClick, onEdit, onDelete, onAdd, depth 
 
       {/* Action bar */}
       <div className="pc-acts">
-        <button className="pc-btn"         onClick={e => { e.stopPropagation(); onEdit(person.id); }}   title="Edit"><i className="ti ti-pencil" style={{ fontSize: 11 }} /></button>
-        <button className="pc-btn pc-del"  onClick={e => { e.stopPropagation(); onDelete(person.id); }} title="Delete"><i className="ti ti-trash"  style={{ fontSize: 11 }} /></button>
-        <button className="pc-btn pc-add"  onClick={e => { e.stopPropagation(); onAdd(person.id); }}    title="Add relation"><i className="ti ti-plus"   style={{ fontSize: 11 }} /></button>
+        <button className="pc-btn" onClick={e=>{e.stopPropagation();onEdit(person.id);}} title="Edit"><i className="ti ti-pencil" style={{fontSize:11}}/></button>
+        <button className="pc-btn pc-del" onClick={e=>{e.stopPropagation();onDelete(person.id);}} title="Delete"><i className="ti ti-trash" style={{fontSize:11}}/></button>
+        {isSpouse
+          ? <button className="pc-btn" onClick={e=>{e.stopPropagation();onLinkTree&&onLinkTree(person);}} title="Link to family tree"
+              style={{color:"#6366f1",borderColor:"#6366f1aa",background:"#6366f111"}}>
+              <i className="ti ti-link" style={{fontSize:11}}/>
+            </button>
+          : <button className="pc-btn pc-add" onClick={e=>{e.stopPropagation();onAdd(person.id);}} title="Add relation">
+              <i className="ti ti-plus" style={{fontSize:11}}/>
+            </button>
+        }
       </div>
     </div>
   );
@@ -120,7 +128,7 @@ function PersonCard({ person, selected, onClick, onEdit, onDelete, onAdd, depth 
 // ─────────────────────────────────────────────────────────
 // TREE NODE with collapse dot on connecting line
 // ─────────────────────────────────────────────────────────
-function FTNode({ node, persons, selId, onSel, onEdit, onDelete, onAdd, depth = 0 }) {
+function FTNode({ node, persons, selId, onSel, onEdit, onDelete, onAdd, onLinkTree, depth = 0 }) {
   const [col, setCol] = useState(depth >= 3);
   const person = persons[node.id]; if (!person) return null;
   const spouse = person.spouseId ? persons[person.spouseId] : null;
@@ -139,7 +147,7 @@ function FTNode({ node, persons, selId, onSel, onEdit, onDelete, onAdd, depth = 
             <span className="couple-heart">❤</span>
             <div className="couple-line" />
           </div>
-          <PersonCard person={spouse} selected={selId === spouse.id} onClick={() => onSel(spouse.id)} onEdit={onEdit} onDelete={onDelete} onAdd={onAdd} depth={depth} />
+          <PersonCard person={spouse} selected={selId===spouse.id} onClick={()=>onSel(spouse.id)} onEdit={onEdit} onDelete={onDelete} onAdd={onAdd} onLinkTree={onLinkTree} depth={depth} isSpouse={true}/>
         </>}
       </div>
 
@@ -164,7 +172,7 @@ function FTNode({ node, persons, selId, onSel, onEdit, onDelete, onAdd, depth = 
               className={`ftcc ${i===0?"ftcf":""} ${i===kids.length-1?"ftcl":""} ${kids.length===1?"ftco":""}`}
               style={{ "--lc": `${lc}66` }}>
               <div className="ftvs" style={{ background: `${lc}66` }} />
-              <FTNode node={c} persons={persons} selId={selId} onSel={onSel} onEdit={onEdit} onDelete={onDelete} onAdd={onAdd} depth={depth + 1} />
+              <FTNode node={c} persons={persons} selId={selId} onSel={onSel} onEdit={onEdit} onDelete={onDelete} onAdd={onAdd} onLinkTree={onLinkTree} depth={depth+1}/>
             </div>
           ))}
         </div>
@@ -218,6 +226,59 @@ const FL = ({ label, children, style={} }) => (
   </div>
 );
 
+
+// ── Link Tree Modal — connect partner to their family tree ──
+function LinkTreeModal({ person, trees, onClose, onLink }) {
+  const village = person?.village || "";
+  const villageTrees = trees.filter(t => t.name && t.name.startsWith(village));
+  const [selectedTree, setSelectedTree] = useState("");
+
+  return (
+    <div className="ov" onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:12,width:"90%",maxWidth:460,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:15,color:"#111827"}}>
+            <i className="ti ti-link" style={{marginRight:8,color:"#6366f1"}}/>
+            Link to Family Tree
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:"#9ca3af"}}>✕</button>
+        </div>
+
+        <div style={{background:"#f3f4f6",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#374151"}}>
+          <strong>{person?.nameEn}</strong> · Village: <strong>{village||"—"}</strong> · Surname: <strong>{person?.surname||"—"}</strong>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:500,color:"#374151",marginBottom:6}}>
+            Select Family Tree to Link
+            {village && <span style={{color:"#6b7280",fontWeight:400}}> (showing trees from {village})</span>}
+          </div>
+          {villageTrees.length === 0 ? (
+            <div style={{fontSize:12,color:"#9ca3af",padding:"12px",background:"#f9fafb",borderRadius:8,border:"1px solid #e5e7eb"}}>
+              No trees found for village "{village}". All available trees shown below.
+            </div>
+          ) : null}
+          <select value={selectedTree} onChange={e=>setSelectedTree(e.target.value)}
+            style={{width:"100%",padding:"9px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,marginTop:6,outline:"none"}}>
+            <option value="">-- Select a tree --</option>
+            {(villageTrees.length > 0 ? villageTrees : trees).map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"8px 20px",border:"1px solid #d1d5db",borderRadius:8,background:"#fff",cursor:"pointer",fontSize:12,color:"#374151"}}>Cancel</button>
+          <button onClick={()=>selectedTree&&onLink(person.id,selectedTree)} disabled={!selectedTree}
+            style={{padding:"8px 20px",border:"none",borderRadius:8,background:"#6366f1",color:"#fff",cursor:selectedTree?"pointer":"not-allowed",fontSize:12,fontWeight:600,opacity:selectedTree?1:0.5}}>
+            <i className="ti ti-link" style={{marginRight:5}}/>Link Tree
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ADD_RELS = ["Child","Partner","Ex-Partner","Parent","Brother","Sister"];
 const LOCKED_ADD  = ["Child","Brother","Sister","Parent"];
 const PARTNER_ADD = ["Partner","Ex-Partner"];
@@ -264,6 +325,7 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
   // Pictures
   const [photo,     setPhoto]  = useState("");
   const [avatar,    setAvatar] = useState("");
+  const [coParentId, setCoParentId] = useState("");
   const fileRef = useRef();
 
   const locked      = LOCKED_ADD.includes(rel);
@@ -282,11 +344,17 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
     else        setFull("");
   }, [rel]);
 
-  // Auto-update fullname when firstName changes for locked rels
+  // Auto-update fullname based on relation type
   useEffect(() => {
-    if (!locked) return;
-    setFull(firstName ? `${firstName} ${treeSurname || ""}`.trim() : treeSurname || "");
-  }, [firstName, locked, treeSurname]);
+    if (locked) {
+      // Blood relation: firstName + treeSurname
+      setFull(firstName ? `${firstName} ${treeSurname || ""}`.trim() : treeSurname || "");
+    } else {
+      // Partner: firstName + selected surname
+      const sur = selSur || "";
+      setFull(firstName ? `${firstName} ${sur}`.trim() : sur);
+    }
+  }, [firstName, locked, treeSurname, selSur]);
 
   // Get used child numbers for siblings of pid
   const usedChildNums = (() => {
@@ -313,6 +381,7 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
     const childNumber = childNo === ">9" ? childNoTxt : childNo;
     onAdd({ rel, pid,
       nameEn: name, firstName, nickname, gender, childNumber,
+      coParentId: rel === "Child" ? coParentId : "",
       village: locked ? treeVillage : selVil,
       surname: locked ? treeSurname : selSur,
       isAlive, dobActual, dobRecords, marriageDate, bloodGroup, dateOfDeath,
@@ -441,6 +510,22 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
               </div>
             )}
 
+            {/* Co-parent selection when adding a child */}
+            {rel === "Child" && (() => {
+              const partners = Object.values(persons).filter(p =>
+                p.spouseId === pid || persons[pid]?.spouseId === p.id
+              );
+              return partners.length > 0 ? (
+                <FL label="Mother / Father of this child">
+                  <select value={coParentId} onChange={e=>setCoParentId(e.target.value)}
+                    style={{width:"100%",padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:12,outline:"none",background:"#fff"}}>
+                    <option value="">-- Select partner (optional) --</option>
+                    {partners.map(p=><option key={p.id} value={p.id}>{p.nameEn} {p.village?"("+p.village+")":""}</option>)}
+                  </select>
+                </FL>
+              ) : null;
+            })()}
+
             {/* Row: First Name | Fullname | Nickname */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
               <FL label="First Name:">
@@ -450,9 +535,9 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
               </FL>
               <FL label="Fullname">
                 <div style={{padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,
-                  fontSize:12,background:"#f3f4f6",color:"#374151",minHeight:36,
+                  fontSize:12,background:"#f3f4f6",color: fullname?"#374151":"#9ca3af",minHeight:36,
                   display:"flex",alignItems:"center"}}>
-                  {fullname || <span style={{color:"#9ca3af"}}>Auto-filled from First Name + Surname</span>}
+                  {fullname || (locked ? `Enter First Name above to auto-fill` : `Select Surname to auto-fill`)}
                 </div>
               </FL>
               <FL label="Nickname">
@@ -846,7 +931,7 @@ function DocUploadModal({ onClose, onBuild }) {
 // ─────────────────────────────────────────────────────────
 // TREE EDITOR
 // ─────────────────────────────────────────────────────────
-function TreeEditor({ tree, setTree, onBack }) {
+function TreeEditor({ tree, setTree, onBack, allTrees=[] }) {
   const [selP, setSelP]         = useState(null);
   const [showAI, setShowAI]     = useState(false);
   const [showRel, setShowRel]   = useState(false);
@@ -865,6 +950,11 @@ function TreeEditor({ tree, setTree, onBack }) {
   }, []);
 
   const savePerson = p => setTree(t => ({ ...t, persons: { ...t.persons, [p.id]: p } }));
+
+  const linkTree = (person, treeId) => {
+    setTree(t => ({ ...t, persons: { ...t.persons, [person.id]: { ...t.persons[person.id], linkedTreeId: treeId } } }));
+    setLinkPerson(null);
+  };
 
   const deletePerson = pid => {
     const p = tree.persons[pid];
@@ -906,6 +996,8 @@ function TreeEditor({ tree, setTree, onBack }) {
         phone: phone||"", email: email||"", address: address||"",
         notes: notes||"", photo: photo||"", avatar: avatar||"",
         spouseId: isPartner ? pid : null,
+        coParentId: coParentId || "",
+        linkedTreeId: "",
         memberNo: counter,
       };
       const np  = exId ? t.persons : { ...t.persons, [nid]: newPerson };
@@ -1014,10 +1106,11 @@ function TreeEditor({ tree, setTree, onBack }) {
             <div style={{ overflow:"visible", minWidth:"max-content" }}>
               <FTNode
                 node={tree.rootNode} persons={tree.persons} selId={selP}
-                onSel={id=>{ setSelP(id); setPanel(true); }}
+                onSel={id=>{setSelP(id);setPanel(true);}}
                 onEdit={openEdit}
                 onDelete={deletePerson}
-                onAdd={id=>{ setRelFor(id); setShowRel(true); }}
+                onAdd={id=>{setRelFor(id);setShowRel(true);}}
+                onLinkTree={p=>setLinkPerson(p)}
               />
             </div>
           ) : (
@@ -1042,8 +1135,9 @@ function TreeEditor({ tree, setTree, onBack }) {
       </button>
 
       {showAI   && <AIChat tree={tree} onClose={()=>setShowAI(false)} />}
-      {showRel  && relFor && <AddRelModal pid={relFor} persons={tree.persons} treeVillage={treeVillage} treeSurname={treeSurname} villages={villages} surnames={surnames} treeRootNode={tree.rootNode} onClose={()=>setShowRel(false)} onAdd={addRel} />}
-      {showDoc  && <DocUploadModal onClose={()=>setShowDoc(false)} onBuild={handleDocBuild} />}
+      {showRel   && relFor    && <AddRelModal pid={relFor} persons={tree.persons} treeVillage={treeVillage} treeSurname={treeSurname} villages={villages} surnames={surnames} treeRootNode={tree.rootNode} onClose={()=>setShowRel(false)} onAdd={addRel}/>}
+      {showDoc   && <DocUploadModal onClose={()=>setShowDoc(false)} onBuild={handleDocBuild}/>}
+      {linkPerson && <LinkTreeModal person={linkPerson} trees={allTrees} onClose={()=>setLinkPerson(null)} onLink={linkTree}/>}
     </div>
   );
 }
@@ -1328,7 +1422,7 @@ export default function App() {
         <Sidebar view={view} setView={handleNav} user={user} theme={theme} toggleTheme={toggle} onLogout={logout}/>
         <div className="app-content">
           {treeView ? (
-            <TreeEditor tree={treeView} setTree={setTreeView} onBack={syncAndClose}/>
+            <TreeEditor tree={treeView} setTree={setTreeView} onBack={syncAndClose} allTrees={trees}/>
           ) : <>
             {view==="my-trees"        && <MyTreesView     trees={trees} onOpenTree={openTree}/>}
             {view==="admin-overview"  && <AdminOverviewView/>}
