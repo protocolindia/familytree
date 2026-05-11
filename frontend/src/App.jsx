@@ -937,10 +937,11 @@ function TreeEditor({ tree, setTree, onBack, allTrees=[] }) {
   const [showRel, setShowRel]   = useState(false);
   const [relFor, setRelFor]     = useState(null);
   const [showDoc, setShowDoc]   = useState(false);
-  const [showPanel, setPanel]   = useState(false);
-  const [search, setSearch]     = useState("");
-  const [villages, setVil]      = useState([]);
-  const [surnames, setSur]      = useState([]);
+  const [showPanel,  setPanel]     = useState(false);
+  const [search,     setSearch]    = useState("");
+  const [villages,   setVil]       = useState([]);
+  const [surnames,   setSur]       = useState([]);
+  const [linkPerson, setLinkPerson]= useState(null);
 
   const { village: treeVillage, surname: treeSurname } = parseTreeName(tree.nameEn || tree.name);
 
