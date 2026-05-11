@@ -202,6 +202,22 @@ function AvatarPicker({ gender, selected, onSelect }) {
 // ─────────────────────────────────────────────────────────
 // ADD RELATION MODAL — full featured
 // ─────────────────────────────────────────────────────────
+// ── Stable form helpers (must be OUTSIDE modal to prevent cursor jump) ──
+const TI = ({ value, onChange, placeholder="", disabled=false, type="text" }) => (
+  <input type={type} value={value||""} onChange={e => onChange && onChange(e.target.value)}
+    placeholder={placeholder} disabled={disabled}
+    style={{ width:"100%", padding:"8px 12px", border:"1px solid #d1d5db", borderRadius:8,
+      fontSize:12, background:disabled?"#f3f4f6":"#fff", color:disabled?"#6b7280":"#111827",
+      outline:"none", boxSizing:"border-box", fontFamily:"inherit" }} />
+);
+
+const FL = ({ label, children, style={} }) => (
+  <div style={{ marginBottom:14, ...style }}>
+    <div style={{ fontSize:12, fontWeight:500, color:"#374151", marginBottom:5 }}>{label}</div>
+    {children}
+  </div>
+);
+
 const ADD_RELS = ["Child","Partner","Ex-Partner","Parent","Brother","Sister"];
 const LOCKED_ADD  = ["Child","Brother","Sister","Parent"];
 const PARTNER_ADD = ["Partner","Ex-Partner"];
@@ -302,22 +318,6 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
       isAlive, dobActual, dobRecords, marriageDate, bloodGroup, dateOfDeath,
       education, occupation, phone, email, address, notes, photo, avatar });
   };
-
-  // ── Sub-components ───────────────────────────────────────
-  const TI = ({ value, onChange, placeholder = "", disabled = false, type = "text" }) => (
-    <input type={type} value={value || ""} onChange={e => onChange && onChange(e.target.value)}
-      placeholder={placeholder} disabled={disabled}
-      style={{ width:"100%", padding:"8px 12px", border:"1px solid #d1d5db", borderRadius:8,
-        fontSize:12, background:disabled?"#f3f4f6":"#fff", color:disabled?"#6b7280":"#111827",
-        outline:"none", boxSizing:"border-box" }} />
-  );
-
-  const FL = ({ label, children, style={} }) => (
-    <div style={{ marginBottom:14, ...style }}>
-      <div style={{ fontSize:12, fontWeight:500, color:"#374151", marginBottom:5 }}>{label}</div>
-      {children}
-    </div>
-  );
 
   const TABS = [
     { id:"personal",     label:"Personal" },
@@ -449,7 +449,11 @@ function AddRelModal({ pid, persons, treeVillage, treeSurname, villages, surname
                   placeholder="Enter first name"/>
               </FL>
               <FL label="Fullname">
-                <TI value={fullname} onChange={setFull} placeholder="Full name"/>
+                <div style={{padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,
+                  fontSize:12,background:"#f3f4f6",color:"#374151",minHeight:36,
+                  display:"flex",alignItems:"center"}}>
+                  {fullname || <span style={{color:"#9ca3af"}}>Auto-filled from First Name + Surname</span>}
+                </div>
               </FL>
               <FL label="Nickname">
                 <TI value={nickname} onChange={setNick} placeholder="Enter Nickname"/>
