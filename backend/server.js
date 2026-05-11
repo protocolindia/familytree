@@ -1,33 +1,25 @@
 require("dotenv").config();
 const express = require("express");
 const cors    = require("cors");
+const app     = express();
 
-const app = express();
-
-app.use(cors({
-  origin: function (origin, callback) { callback(null, true); },
-  credentials: true,
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"],
-}));
+app.use(cors({ origin: (o, cb) => cb(null, true), credentials: true, methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"], allowedHeaders: ["Content-Type","Authorization"] }));
 app.options("*", cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "15mb" }));
 
-app.get("/",       (_req, res) => res.json({ status: "ok", service: "vamsavriksham-api", version: "2.0.0" }));
-app.get("/health", (_req, res) => res.json({ status: "ok", service: "vamsavriksham-api", version: "2.0.0" }));
+app.get("/",       (_q, r) => r.json({ status: "ok", service: "vamsavriksham-api", version: "3.0.0" }));
+app.get("/health", (_q, r) => r.json({ status: "ok", service: "vamsavriksham-api", version: "3.0.0" }));
 
-app.use("/api/auth",     require("./routes/auth"));
-app.use("/api/trees",    require("./routes/trees"));
-app.use("/api/persons",  require("./routes/persons"));
-app.use("/api/ai",       require("./routes/ai"));
-app.use("/api/admin",    require("./routes/admin"));
-app.use("/api/settings", require("./routes/settings"));
+app.use("/api/auth",       require("./routes/auth"));
+app.use("/api/trees",      require("./routes/trees"));
+app.use("/api/persons",    require("./routes/persons"));
+app.use("/api/ai",         require("./routes/ai"));
+app.use("/api/admin",      require("./routes/admin"));
+app.use("/api/settings",   require("./routes/settings"));
+app.use("/api/masterdata", require("./routes/masterdata"));
 
-app.use((_req, res) => res.status(404).json({ error: "Route not found" }));
-app.use((err, _req, res, _next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({ error: err.message || "Server error" });
-});
+app.use((_q, r) => r.status(404).json({ error: "Route not found" }));
+app.use((e, _q, r, _n) => { console.error(e.stack); r.status(e.status || 500).json({ error: e.message || "Server error" }); });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`🚀 API v2.0 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 API v3.0 on port ${PORT}`));

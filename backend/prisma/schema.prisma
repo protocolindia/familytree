@@ -27,6 +27,8 @@ model Tree {
   nameEn      String
   description String?
   visibility  String   @default("private")
+  treeData    String?                       // JSON: stores persons + rootNode
+  memberCount Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -82,8 +84,22 @@ model Permission {
 }
 
 model Setting {
-  id    String @id @default(cuid())
-  key   String @unique
-  value String
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
   updatedAt DateTime @updatedAt
+}
+
+model Village {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  teluguName String
+  createdAt  DateTime @default(now())
+}
+
+model Surname {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  teluguName String
+  createdAt  DateTime @default(now())
 }
