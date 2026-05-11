@@ -1,100 +1,117 @@
 const router    = require("express").Router();
 const adminAuth = require("../middleware/adminAuth");
+const auth      = require("../middleware/auth");
 const bcrypt    = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
-const prisma    = new PrismaClient();
+const prisma = new PrismaClient();
 
-router.use(adminAuth);
-
-// GET /api/admin/stats
-router.get("/stats", async (_req, res) => {
+// ── Stats ─────────────────────────────────────────────────
+router.get("/stats", adminAuth, async (_req, res) => {
   try {
-    const [totalUsers, totalTrees, totalPersons, totalRelationships, publicTrees, privateTrees, superAdmins, admins, activeUsers] = await Promise.all([
-      prisma.user.count(), prisma.tree.count(), prisma.person.count(), prisma.relationship.count(),
+    const now  = new Date();
+    const week = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const [totalUsers, totalTrees, totalPersons, recentUsers, recentTrees, publicTrees, superAdmins, admins, activeUsers] = await Promise.all([
+      prisma.user.count(),
+      prisma.tree.count(),
+      prisma.person.count(),
+      prisma.user.count({ where: { createdAt: { gte: week } } }),
+      prisma.tree.count({ where: { createdAt: { gte: week } } }),
       prisma.tree.count({ where: { visibility: "public" } }),
-      prisma.tree.count({ where: { visibility: "private" } }),
       prisma.user.count({ where: { role: "SUPERADMIN" } }),
       prisma.user.count({ where: { role: "ADMIN" } }),
       prisma.user.count({ where: { isActive: true } }),
     ]);
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentUsers = await prisma.user.count({ where: { createdAt: { gte: since } } });
-    const recentTrees = await prisma.tree.count({ where: { createdAt: { gte: since } } });
-    res.json({ totalUsers, totalTrees, totalPersons, totalRelationships, publicTrees, privateTrees, superAdmins, admins, activeUsers, recentUsers, recentTrees });
+    res.json({ totalUsers, totalTrees, totalPersons, totalRelationships: 0,
+      recentUsers, recentTrees, publicTrees, privateTrees: totalTrees - publicTrees,
+      superAdmins, admins, activeUsers });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/admin/users
-router.get("/users", async (_req, res) => {
+// ── Users ─────────────────────────────────────────────────
+router.get("/users", adminAuth, async (_req, res) => {
   try {
-    const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" }, select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true, _count: { select: { ownedTrees: true } } } });
-    res.json(users);
+    res.json(await prisma.user.findMany({ include: { _count: { select: { ownedTrees: true } } }, orderBy: { createdAt: "desc" } }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/admin/users
-router.post("/users", async (req, res) => {
+router.post("/users", adminAuth, async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ error: "All fields required" });
-    const exists = await prisma.user.findUnique({ where: { email } });
-    if (exists) return res.status(400).json({ error: "Email already exists" });
-    const hashed = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({ data: { name, email, password: hashed, role: role || "USER" }, select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true, _count: { select: { ownedTrees: true } } } });
+    const hash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({ data: { name, email, password: hash, role: role || "USER" }, include: { _count: { select: { ownedTrees: true } } } });
     res.json(user);
+  } catch (e) {
+    if (e.code === "P2002") return res.status(400).json({ error: "Email already exists" });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.patch("/users/:id/role", adminAuth, async (req, res) => {
+  try { res.json(await prisma.user.update({ where: { id: req.params.id }, data: { role: req.body.role } })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch("/users/:id/status", adminAuth, async (req, res) => {
+  try { res.json(await prisma.user.update({ where: { id: req.params.id }, data: { isActive: req.body.isActive } })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/users/:id", adminAuth, async (req, res) => {
+  try { await prisma.user.delete({ where: { id: req.params.id } }); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Tree assignment per user ──────────────────────────────
+// GET /api/admin/users/:id/trees — get trees assigned to user
+router.get("/users/:id/trees", adminAuth, async (req, res) => {
+  try {
+    const perms = await prisma.permission.findMany({
+      where: { userId: req.params.id },
+      include: { tree: true }
+    });
+    res.json(perms.map(p => ({ ...p.tree, permissionId: p.id, role: p.role })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PATCH /api/admin/users/:id/role
-router.patch("/users/:id/role", async (req, res) => {
+// POST /api/admin/users/:id/trees — assign a tree to user
+router.post("/users/:id/trees", adminAuth, async (req, res) => {
   try {
-    const { role } = req.body;
-    if (!["USER","ADMIN","SUPERADMIN"].includes(role)) return res.status(400).json({ error: "Invalid role" });
-    const user = await prisma.user.update({ where: { id: req.params.id }, data: { role }, select: { id: true, role: true } });
-    res.json(user);
+    const { treeId, role } = req.body;
+    const perm = await prisma.permission.upsert({
+      where: { userId_treeId: { userId: req.params.id, treeId } },
+      update: { role: role || "viewer" },
+      create: { userId: req.params.id, treeId, role: role || "viewer" }
+    });
+    res.json(perm);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PATCH /api/admin/users/:id/status
-router.patch("/users/:id/status", async (req, res) => {
+// DELETE /api/admin/users/:id/trees/:treeId — remove tree from user
+router.delete("/users/:id/trees/:treeId", adminAuth, async (req, res) => {
   try {
-    if (req.params.id === req.user.id) return res.status(400).json({ error: "Cannot deactivate yourself" });
-    const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: req.body.isActive }, select: { id: true, isActive: true } });
-    res.json(user);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/admin/users/:id
-router.delete("/users/:id", async (req, res) => {
-  try {
-    if (req.params.id === req.user.id) return res.status(400).json({ error: "Cannot delete yourself" });
-    await prisma.user.delete({ where: { id: req.params.id } });
+    await prisma.permission.deleteMany({ where: { userId: req.params.id, treeId: req.params.treeId } });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/admin/trees
-router.get("/trees", async (_req, res) => {
+// ── Admin tree management ─────────────────────────────────
+router.get("/trees", adminAuth, async (_req, res) => {
   try {
-    const trees = await prisma.tree.findMany({ orderBy: { createdAt: "desc" }, include: { owner: { select: { id: true, name: true, email: true } }, _count: { select: { persons: true } } } });
-    res.json(trees);
+    res.json(await prisma.tree.findMany({
+      include: { owner: { select: { id: true, name: true, email: true } }, _count: { select: { persons: true } } },
+      orderBy: { createdAt: "desc" }
+    }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PATCH /api/admin/trees/:id
-router.patch("/trees/:id", async (req, res) => {
-  try {
-    const tree = await prisma.tree.update({ where: { id: req.params.id }, data: { visibility: req.body.visibility } });
-    res.json(tree);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+router.patch("/trees/:id", adminAuth, async (req, res) => {
+  try { res.json(await prisma.tree.update({ where: { id: req.params.id }, data: req.body })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/admin/trees/:id
-router.delete("/trees/:id", async (req, res) => {
-  try {
-    await prisma.tree.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+router.delete("/trees/:id", adminAuth, async (req, res) => {
+  try { await prisma.tree.delete({ where: { id: req.params.id } }); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

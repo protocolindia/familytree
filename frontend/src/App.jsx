@@ -1102,7 +1102,12 @@ function TreeEditor({ tree, setTree, onBack, allTrees=[] }) {
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <div style={{ flex:1, overflow:"auto", padding:"48px 32px 80px", display:"flex", justifyContent:"center", alignItems:"flex-start", background:"var(--tree-bg)" }}
           onClick={() => { setSearch(""); }}>
-          {hasPersons ? (
+          {tree._loading ? (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:80,color:"var(--text3)"}}>
+              <i className="ti ti-loader-2" style={{fontSize:28,marginRight:10,animation:"spin 1s linear infinite"}}/>
+              <span style={{fontSize:14}}>Loading tree data…</span>
+            </div>
+          ) : hasPersons ? (
             <div style={{ overflow:"visible", minWidth:"max-content" }}>
               <FTNode
                 node={tree.rootNode} persons={tree.persons} selId={selP}
@@ -1182,10 +1187,10 @@ function AuthPage({ onLogin, theme, toggleTheme }) {
 // ─────────────────────────────────────────────────────────
 // ALL OTHER VIEWS (reused from v4)
 // ─────────────────────────────────────────────────────────
-function MyTreesView({ trees, onOpenTree }) {
+function MyTreesView({ trees, onOpenTree, treesLoading }) {
   // trees comes from App (shared state) 
   return(<div className="view-wrap"><div className="view-header"><div><div className="view-title">My Trees</div><div className="view-sub">Family trees you have access to</div></div></div>
-    {trees.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:"var(--text3)"}}><i className="ti ti-binary-tree" style={{fontSize:48,display:"block",marginBottom:12}}/><div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:6}}>No trees assigned yet</div></div>):(
+    {treesLoading?(<div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:60,color:"var(--text3)"}}><i className="ti ti-loader-2" style={{fontSize:24,marginRight:8,animation:"spin 1s linear infinite"}}/>Loading trees…</div>):trees.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:"var(--text3)"}}><i className="ti ti-binary-tree" style={{fontSize:48,display:"block",marginBottom:12}}/><div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:6}}>No trees assigned yet</div><div style={{fontSize:12,marginTop:4}}>Contact admin to assign trees to your account</div></div>):(
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
         {trees.map((t,i)=>(<div key={t.id} onClick={()=>onOpenTree(t)} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:18,cursor:"pointer",transition:"all 0.2s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=GEN_COLORS[i%GEN_COLORS.length];e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.transform="";}}>
           <div style={{width:44,height:44,borderRadius:"50%",background:`${GEN_COLORS[i%GEN_COLORS.length]}22`,border:`2px solid ${GEN_COLORS[i%GEN_COLORS.length]}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12}}><i className="ti ti-binary-tree" style={{fontSize:20,color:GEN_COLORS[i%GEN_COLORS.length]}}/></div>
@@ -1271,12 +1276,93 @@ function AdminTreesView({ trees, setTrees, onOpenTree }) {
 
 function AdminOverviewView(){const[S,setS]=useState(null);useEffect(()=>{api("GET","/api/admin/stats").then(setS).catch(()=>{});},[]); if(!S)return<Loader/>;const C=["#3b82f6","#10b981","#f59e0b","#8b5cf6"];const st=[["ti-users","Users",S.totalUsers,`+${S.recentUsers} this week`,0],["ti-binary-tree","Trees",S.totalTrees,`+${S.recentTrees} this week`,1],["ti-user-circle","Members",S.totalPersons,"People recorded",2],["ti-arrows-join","Relations",S.totalRelationships,"Links",3]];return(<div className="view-wrap"><div className="view-header"><div><div className="view-title">Overview</div><div className="view-sub">Platform statistics</div></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:12}}>{st.map(([ic,lb,vl,sb,ci])=>(<div key={lb} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><div style={{width:40,height:40,borderRadius:10,background:C[ci]+"22",display:"flex",alignItems:"center",justifyContent:"center"}}><i className={`ti ${ic}`} style={{fontSize:20,color:C[ci]}}/></div><div style={{fontSize:28,fontWeight:700,color:"var(--text)"}}>{vl}</div></div><div style={{fontSize:12,fontWeight:600,color:"var(--text)"}}>{lb}</div><div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>{sb}</div></div>))}</div></div>);}
 
-function AdminUsersView({currentUser}){const[users,setUsers]=useState([]);const[load,setLoad]=useState(true);const[srch,setSrch]=useState("");const[msg,setMsg]=useState("");const[showAdd,setAdd]=useState(false);const[form,setForm]=useState({name:"",email:"",password:"",role:"USER"});const[saving,setSave]=useState(false);const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),2500);};useEffect(()=>{api("GET","/api/admin/users").then(setUsers).finally(()=>setLoad(false));},[]); const changeRole=async(id,role)=>{try{await api("PATCH",`/api/admin/users/${id}/role`,{role});setUsers(u=>u.map(x=>x.id===id?{...x,role}:x));flash("Role updated");}catch(e){flash("Error: "+e.message);}};const toggleStatus=async(id,isActive)=>{try{const u=await api("PATCH",`/api/admin/users/${id}/status`,{isActive:!isActive});setUsers(us=>us.map(x=>x.id===id?{...x,isActive:u.isActive}:x));flash(u.isActive?"Activated":"Deactivated");}catch(e){flash("Error: "+e.message);}};const del=async(id,n)=>{if(!window.confirm(`Delete "${n}"?`))return;try{await api("DELETE",`/api/admin/users/${id}`);setUsers(u=>u.filter(x=>x.id!==id));flash("Deleted");}catch(e){flash("Error: "+e.message);}};const addUser=async()=>{if(!form.name||!form.email||!form.password)return;setSave(true);try{const u=await api("POST","/api/admin/users",form);setUsers(us=>[u,...us]);setAdd(false);setForm({name:"",email:"",password:"",role:"USER"});flash("User added");}catch(e){flash("Error: "+e.message);}setSave(false);};const upd=k=>e=>setForm(f=>({...f,[k]:e.target.value}));const filtered=users.filter(u=>u.name.toLowerCase().includes(srch.toLowerCase())||u.email.toLowerCase().includes(srch.toLowerCase()));return(<div className="view-wrap"><div className="view-header"><div><div className="view-title">Users</div><div className="view-sub">Manage user accounts and roles</div></div><button className="btn1" onClick={()=>setAdd(v=>!v)}><i className="ti ti-user-plus" style={{fontSize:12,marginRight:4}}/>Add User</button></div>
+
+// ── Assign Trees Modal ────────────────────────────────────
+function AssignTreesModal({ user, allTrees, onClose }) {
+  const [assigned,  setAssigned]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(null); // treeId being toggled
+  const [msg,       setMsg]       = useState("");
+
+  useEffect(() => {
+    api("GET", `/api/admin/users/${user.id}/trees`)
+      .then(ts => setAssigned(ts.map(t => t.id)))
+      .finally(() => setLoading(false));
+  }, [user.id]);
+
+  const toggle = async (treeId) => {
+    setSaving(treeId);
+    try {
+      if (assigned.includes(treeId)) {
+        await api("DELETE", `/api/admin/users/${user.id}/trees/${treeId}`);
+        setAssigned(v => v.filter(id => id !== treeId));
+        setMsg("Tree removed");
+      } else {
+        await api("POST", `/api/admin/users/${user.id}/trees`, { treeId, role: "editor" });
+        setAssigned(v => [...v, treeId]);
+        setMsg("Tree assigned");
+      }
+    } catch(e) { setMsg("Error: " + e.message); }
+    setSaving(null);
+    setTimeout(() => setMsg(""), 2000);
+  };
+
+  return (
+    <div className="ov" onClick={onClose}>
+      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,width:"90%",maxWidth:520,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px var(--shadow)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"14px 18px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--text)"}}>Assign Trees</div>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>User: {user.name} · {user.role}</div>
+          </div>
+          <button onClick={onClose} className="iconbtn">✕</button>
+        </div>
+
+        {msg && <div style={{padding:"8px 18px",background:"var(--success-bg)",borderBottom:"1px solid var(--success)",fontSize:12,color:"var(--success)"}}>{msg}</div>}
+
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+          {loading ? <Loader/> : allTrees.length === 0
+            ? <div style={{textAlign:"center",padding:32,color:"var(--text3)",fontSize:12}}>No trees available. Create trees in the Family Trees section first.</div>
+            : allTrees.map(t => {
+                const isAssigned = assigned.includes(t.id);
+                const isSaving   = saving === t.id;
+                return (
+                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",border:"1px solid var(--border)",borderRadius:10,marginBottom:8,background:isAssigned?"var(--accent-bg)":"var(--bg3)",transition:"all 0.15s"}}>
+                    <div style={{width:40,height:40,borderRadius:"50%",background:isAssigned?"var(--accent-bg)":"var(--bg3)",border:`2px solid ${isAssigned?"var(--accent)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <i className="ti ti-binary-tree" style={{fontSize:18,color:isAssigned?"var(--accent)":"var(--text3)"}}/>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,fontSize:13,color:"var(--text)",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
+                      <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>Owner: {t.owner?.name||"—"} · {t._count?.persons||0} members</div>
+                    </div>
+                    <button onClick={()=>toggle(t.id)} disabled={isSaving}
+                      style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${isAssigned?"var(--danger)":"var(--accent)"}`,
+                        background:isAssigned?"var(--danger-bg)":"var(--accent-bg)",
+                        color:isAssigned?"var(--danger)":"var(--accent)",
+                        cursor:isSaving?"not-allowed":"pointer",fontSize:11,fontWeight:600,flexShrink:0,
+                        opacity:isSaving?0.5:1,whiteSpace:"nowrap"}}>
+                      {isSaving?"…":isAssigned?"Remove":"Assign"}
+                    </button>
+                  </div>
+                );
+              })
+          }
+        </div>
+
+        <div style={{padding:"12px 18px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end"}}>
+          <button className="btn1" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminUsersView({currentUser}){const[users,setUsers]=useState([]);const[load,setLoad]=useState(true);const[srch,setSrch]=useState("");const[msg,setMsg]=useState("");const[showAdd,setAdd]=useState(false);const[form,setForm]=useState({name:"",email:"",password:"",role:"USER"});const[saving,setSave]=useState(false);const[assignUser,setAssignUser]=useState(null);const[allTrees,setAllTrees]=useState([]);const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),2500);};useEffect(()=>{api("GET","/api/admin/users").then(setUsers).finally(()=>setLoad(false));api("GET","/api/admin/trees").then(setAllTrees).catch(()=>{});},[]); const changeRole=async(id,role)=>{try{await api("PATCH",`/api/admin/users/${id}/role`,{role});setUsers(u=>u.map(x=>x.id===id?{...x,role}:x));flash("Role updated");}catch(e){flash("Error: "+e.message);}};const toggleStatus=async(id,isActive)=>{try{const u=await api("PATCH",`/api/admin/users/${id}/status`,{isActive:!isActive});setUsers(us=>us.map(x=>x.id===id?{...x,isActive:u.isActive}:x));flash(u.isActive?"Activated":"Deactivated");}catch(e){flash("Error: "+e.message);}};const del=async(id,n)=>{if(!window.confirm(`Delete "${n}"?`))return;try{await api("DELETE",`/api/admin/users/${id}`);setUsers(u=>u.filter(x=>x.id!==id));flash("Deleted");}catch(e){flash("Error: "+e.message);}};const addUser=async()=>{if(!form.name||!form.email||!form.password)return;setSave(true);try{const u=await api("POST","/api/admin/users",form);setUsers(us=>[u,...us]);setAdd(false);setForm({name:"",email:"",password:"",role:"USER"});flash("User added");}catch(e){flash("Error: "+e.message);}setSave(false);};const upd=k=>e=>setForm(f=>({...f,[k]:e.target.value}));const filtered=users.filter(u=>u.name.toLowerCase().includes(srch.toLowerCase())||u.email.toLowerCase().includes(srch.toLowerCase()));return(<div className="view-wrap"><div className="view-header"><div><div className="view-title">Users</div><div className="view-sub">Manage user accounts and roles</div></div><button className="btn1" onClick={()=>setAdd(v=>!v)}><i className="ti ti-user-plus" style={{fontSize:12,marginRight:4}}/>Add User</button></div>
   {msg&&<div style={{background:"var(--success-bg)",border:"1px solid var(--success)",color:"var(--success)",padding:"8px 12px",borderRadius:8,fontSize:12,marginBottom:14}}>{msg}</div>}
   {showAdd&&<div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:16,marginBottom:14}}><div style={{fontWeight:600,fontSize:13,color:"var(--text)",marginBottom:12}}>Add New User</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>{[["name","Full Name","text","Full name"],["email","Email","email","email@example.com"],["password","Password","password","••••••••"]].map(([k,lb,t,ph])=><div key={k} className="fg"><label>{lb}</label><input type={t} value={form[k]} onChange={upd(k)} placeholder={ph} style={{width:"100%",fontSize:12}}/></div>)}<div className="fg"><label>Role</label><select value={form.role} onChange={upd("role")} style={{width:"100%",fontSize:12}}><option value="USER">User</option><option value="ADMIN">Admin</option><option value="SUPERADMIN">SuperAdmin</option></select></div></div><div style={{display:"flex",gap:8}}><button className="btn2" onClick={()=>setAdd(false)}>Cancel</button><button className="btn1" onClick={addUser} disabled={saving}>{saving?"Adding…":"Add User"}</button></div></div>}
   <div style={{display:"flex",gap:8,marginBottom:14}}><input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="Search users…" style={{width:240,fontSize:12}}/></div>
-  {load?<Loader/>:<div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead style={{background:"var(--bg3)"}}><tr>{["User","Email","Role","Status","Trees","Joined","Actions"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead><tbody>{filtered.map(u=><tr key={u.id} style={{borderTop:"1px solid var(--border2)",opacity:u.isActive?1:0.5}} onMouseEnter={e=>e.currentTarget.style.background="var(--bg3)"} onMouseLeave={e=>e.currentTarget.style.background=""}><td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0}}>{u.name[0]}</div><span style={{fontWeight:500,color:"var(--text)"}}>{u.name}{u.id===currentUser.id&&<span style={{fontSize:9,color:"var(--accent)",marginLeft:4}}>(you)</span>}</span></div></td><td style={{padding:"10px 14px",color:"var(--text2)",fontSize:11}}>{u.email}</td><td style={{padding:"10px 14px"}}>{u.id===currentUser.id?<span style={{fontSize:10,fontWeight:700}}>{u.role}</span>:<select value={u.role} onChange={e=>changeRole(u.id,e.target.value)} style={{fontSize:10,padding:"2px 6px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",cursor:"pointer"}}><option value="USER">User</option><option value="ADMIN">Admin</option><option value="SUPERADMIN">SuperAdmin</option></select>}</td><td style={{padding:"10px 14px"}}><span style={{background:u.isActive?"var(--success-bg)":"var(--bg3)",color:u.isActive?"var(--success)":"var(--text3)",border:`1px solid ${u.isActive?"var(--success)":"var(--border)"}`,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:700}}>{u.isActive?"Active":"Inactive"}</span></td><td style={{padding:"10px 14px",textAlign:"center",color:"var(--text2)"}}>{u._count?.ownedTrees||0}</td><td style={{padding:"10px 14px",color:"var(--text3)",fontSize:10,whiteSpace:"nowrap"}}>{u.createdAt?.slice(0,10)}</td><td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:4}}>{u.id!==currentUser.id&&<><button onClick={()=>toggleStatus(u.id,u.isActive)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"var(--text2)",display:"inline-flex",alignItems:"center"}}><i className={`ti ti-${u.isActive?"user-off":"user-check"}`} style={{fontSize:12}}/></button><button onClick={()=>del(u.id,u.name)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"var(--text2)",display:"inline-flex",alignItems:"center"}}><i className="ti ti-trash" style={{fontSize:12}}/></button></>}</div></td></tr>)}</tbody></table>{filtered.length===0&&<div style={{textAlign:"center",padding:"24px 20px",color:"var(--text3)",fontSize:12}}>No users found</div>}</div>}
-</div>);}
+  {load?<Loader/>:<div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead style={{background:"var(--bg3)"}}><tr>{["User","Email","Role","Status","Trees","Joined","Actions"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead><tbody>{filtered.map(u=><tr key={u.id} style={{borderTop:"1px solid var(--border2)",opacity:u.isActive?1:0.5}} onMouseEnter={e=>e.currentTarget.style.background="var(--bg3)"} onMouseLeave={e=>e.currentTarget.style.background=""}><td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0}}>{u.name[0]}</div><span style={{fontWeight:500,color:"var(--text)"}}>{u.name}{u.id===currentUser.id&&<span style={{fontSize:9,color:"var(--accent)",marginLeft:4}}>(you)</span>}</span></div></td><td style={{padding:"10px 14px",color:"var(--text2)",fontSize:11}}>{u.email}</td><td style={{padding:"10px 14px"}}>{u.id===currentUser.id?<span style={{fontSize:10,fontWeight:700}}>{u.role}</span>:<select value={u.role} onChange={e=>changeRole(u.id,e.target.value)} style={{fontSize:10,padding:"2px 6px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",cursor:"pointer"}}><option value="USER">User</option><option value="ADMIN">Admin</option><option value="SUPERADMIN">SuperAdmin</option></select>}</td><td style={{padding:"10px 14px"}}><span style={{background:u.isActive?"var(--success-bg)":"var(--bg3)",color:u.isActive?"var(--success)":"var(--text3)",border:`1px solid ${u.isActive?"var(--success)":"var(--border)"}`,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:700}}>{u.isActive?"Active":"Inactive"}</span></td><td style={{padding:"10px 14px",textAlign:"center",color:"var(--text2)"}}>{u._count?.ownedTrees||0}</td><td style={{padding:"10px 14px",color:"var(--text3)",fontSize:10,whiteSpace:"nowrap"}}>{u.createdAt?.slice(0,10)}</td><td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}><button onClick={()=>setAssignUser(u)} title="Assign Trees" style={{background:"var(--accent-bg)",border:"1px solid var(--accent)",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"var(--accent)",display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600}}><i className="ti ti-binary-tree" style={{fontSize:11}}/>Trees</button>{u.id!==currentUser.id&&<><button onClick={()=>toggleStatus(u.id,u.isActive)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"var(--text2)",display:"inline-flex",alignItems:"center"}}><i className={`ti ti-${u.isActive?"user-off":"user-check"}`} style={{fontSize:12}}/></button><button onClick={()=>del(u.id,u.name)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"4px 7px",cursor:"pointer",color:"var(--text2)",display:"inline-flex",alignItems:"center"}}><i className="ti ti-trash" style={{fontSize:12}}/></button></>}</div></td></tr>)}</tbody></table>{filtered.length===0&&<div style={{textAlign:"center",padding:"24px 20px",color:"var(--text3)",fontSize:12}}>No users found</div>}</div>}
+{assignUser&&<AssignTreesModal user={assignUser} allTrees={allTrees} onClose={()=>setAssignUser(null)}/>}</div>);}
 
 function AdminSettingsView(){const[settings,setSettings]=useState({});const[load,setLoad]=useState(true);const[saving,setSave]=useState(false);const[msg,setMsg]=useState({text:"",type:""});useEffect(()=>{api("GET","/api/settings").then(setSettings).catch(()=>{}).finally(()=>setLoad(false));},[]); const upd=k=>e=>setSettings(s=>({...s,[k]:e.target.type==="checkbox"?String(e.target.checked):e.target.value}));const save=async(keys)=>{setSave(true);setMsg({text:"",type:""});try{const sub={};keys.forEach(k=>{if(settings[k]!==undefined&&settings[k]!=="••••••••")sub[k]=settings[k];});await api("POST","/api/settings",sub);setMsg({text:"✓ Saved",type:"success"});}catch(e){setMsg({text:"Error: "+e.message,type:"error"});}setSave(false);setTimeout(()=>setMsg({text:"",type:""}),3000);};const Field=({label,k,type="text",ph="",hint,opts})=>(<div className="fg"><label>{label}</label>{opts?<select value={settings[k]||""} onChange={upd(k)} style={{width:"100%",fontSize:12}}>{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>:type==="toggle"?(<div style={{display:"flex",alignItems:"center",gap:10}}><div onClick={()=>setSettings(s=>({...s,[k]:String(s[k]!=="true")}))} style={{width:40,height:22,borderRadius:11,background:settings[k]==="true"?"#3b82f6":"var(--border)",cursor:"pointer",position:"relative",transition:"background 0.2s",flexShrink:0}}><div style={{position:"absolute",top:2,left:settings[k]==="true"?18:2,width:18,height:18,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/></div><span style={{fontSize:12,color:"var(--text2)"}}>{settings[k]==="true"?"Enabled":"Disabled"}</span></div>):<input type={type} value={settings[k]||""} onChange={upd(k)} placeholder={ph} style={{width:"100%",fontSize:12}}/>}{hint&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{hint}</div>}</div>);const Sec=({title,icon,color,keys,children})=>(<div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden",marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid var(--border)",background:"var(--bg3)"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:32,height:32,borderRadius:8,background:color+"22",display:"flex",alignItems:"center",justifyContent:"center"}}><i className={`ti ${icon}`} style={{fontSize:15,color}}/></div><span style={{fontWeight:600,fontSize:13,color:"var(--text)"}}>{title}</span></div><button className="btn1" style={{padding:"4px 12px",fontSize:11}} onClick={()=>save(keys)} disabled={saving}>{saving?"Saving…":"Save"}</button></div><div style={{padding:16}}>{children}</div></div>);
 if(load)return<Loader/>;return(<div className="view-wrap"><div className="view-header"><div><div className="view-title">Settings</div><div className="view-sub">Platform configuration</div></div></div>{msg.text&&<div style={{background:msg.type==="success"?"var(--success-bg)":"var(--danger-bg)",border:`1px solid var(--${msg.type==="success"?"success":"danger"})`,color:`var(--${msg.type==="success"?"success":"danger-text"})`,padding:"10px 14px",borderRadius:8,fontSize:12,marginBottom:16}}>{msg.text}</div>}
@@ -1353,7 +1439,8 @@ function Sidebar({ view, setView, user, theme, toggleTheme, onLogout }) {
 export default function App() {
   const [user, setUser]         = useState(()=>{ try{return JSON.parse(localStorage.getItem("ft_user"));}catch{return null;} });
   const [view, setView]         = useState("my-trees");
-  const [trees, setTrees]       = useState([DEMO]);          // ← trees live HERE in App
+  const [trees, setTrees]       = useState([]);
+  const [treesLoading, setTreesLoading] = useState(true);
   const [treeView, setTreeView] = useState(null);
   const treeRef                 = useRef(null);              // always latest tree
   const { theme, toggle }       = useTheme();
@@ -1364,9 +1451,11 @@ export default function App() {
   // Load trees from backend after login
   useEffect(() => {
     if (!user) return;
+    setTreesLoading(true);
     api("GET", "/api/trees")
-      .then(d => { const all=[...(d.owned||[]),...(d.shared||[])]; setTrees(all.length>0?all:[DEMO]); })
-      .catch(() => setTrees([DEMO]));
+      .then(d => { setTrees([...(d.owned||[]),...(d.shared||[])]); })
+      .catch(e => { console.error("Trees fetch failed:", e); setTrees([]); })
+      .finally(() => setTreesLoading(false));
   }, [user]);
 
   // Save tree to backend + update local list
@@ -1388,7 +1477,8 @@ export default function App() {
 
   // Open a tree — load full data from backend
   const openTree = async (t) => {
-    if (t.id === "demo") { setTreeView({...t}); return; }
+    // Start with basic tree info immediately (fast UI response)
+    setTreeView({ ...t, persons:{}, rootNode:null, members:0, _loading:true });
     try {
       const full = await api("GET", `/api/trees/${t.id}`);
       let persons = {}; let rootNode = null; let memberCounter = 0;
@@ -1398,12 +1488,14 @@ export default function App() {
           persons       = parsed.persons       || {};
           rootNode      = parsed.rootNode      || null;
           memberCounter = parsed.memberCounter || Object.keys(parsed.persons||{}).length;
-        } catch {}
+        } catch(parseErr) { console.error("treeData parse error:", parseErr); }
       }
       setTreeView({ ...t, ...full, persons, rootNode, memberCounter,
-        members: full.memberCount || Object.keys(persons).length });
+        members: full.memberCount || Object.keys(persons).length, _loading:false });
     } catch(e) {
-      setTreeView({...t, persons:{}, rootNode:null, members:0});
+      console.error("openTree failed:", e.message);
+      // Keep the basic tree info but mark as loaded
+      setTreeView(prev => prev ? {...prev, _loading:false} : null);
     }
   };
 
@@ -1424,7 +1516,7 @@ export default function App() {
           {treeView ? (
             <TreeEditor tree={treeView} setTree={setTreeView} onBack={syncAndClose} allTrees={trees}/>
           ) : <>
-            {view==="my-trees"        && <MyTreesView     trees={trees} onOpenTree={openTree}/>}
+            {view==="my-trees"        && <MyTreesView     trees={trees} onOpenTree={openTree} treesLoading={treesLoading}/>}
             {view==="admin-overview"  && <AdminOverviewView/>}
             {view==="admin-trees"     && <AdminTreesView  trees={trees} setTrees={setTrees} onOpenTree={openTree}/>}
             {view==="admin-users"     && <AdminUsersView   currentUser={user}/>}
