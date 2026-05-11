@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────
 const BASE = import.meta.env.VITE_API_URL || "";
@@ -1102,12 +1102,7 @@ function TreeEditor({ tree, setTree, onBack, allTrees=[] }) {
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <div style={{ flex:1, overflow:"auto", padding:"48px 32px 80px", display:"flex", justifyContent:"center", alignItems:"flex-start", background:"var(--tree-bg)" }}
           onClick={() => { setSearch(""); }}>
-          {tree._loading ? (
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:80,color:"var(--text3)"}}>
-              <i className="ti ti-loader-2" style={{fontSize:28,marginRight:10,animation:"spin 1s linear infinite"}}/>
-              <span style={{fontSize:14}}>Loading tree data…</span>
-            </div>
-          ) : hasPersons ? (
+          {hasPersons ? (
             <div style={{ overflow:"visible", minWidth:"max-content" }}>
               <FTNode
                 node={tree.rootNode} persons={tree.persons} selId={selP}
@@ -1378,10 +1373,8 @@ function Loader(){return<div style={{display:"flex",alignItems:"center",justifyC
 // ─────────────────────────────────────────────────────────
 // LEFT SIDEBAR
 // ─────────────────────────────────────────────────────────
-function Sidebar({ view, setView, user, theme, toggleTheme, onLogout }) {
+function Sidebar({ view, setView, user, theme, toggleTheme, onLogout, isSuperAdmin=false, isAdmin=false }) {
   const [masterOpen, setMasterOpen] = useState(view?.startsWith("master"));
-  const isSuperAdmin = user?.role === "SUPERADMIN";
-  const isAdmin      = user?.role === "ADMIN" || isSuperAdmin;
   const NavBtn = ({ id, icon, label, indent=false }) => (
     <button onClick={()=>setView(id)} className={`nav-btn ${view===id?"nav-active":""} ${indent?"nav-indent":""}`}>
       <i className={`ti ${icon}`} style={{ fontSize:14, flexShrink:0 }} /><span style={{ flex:1, textAlign:"left" }}>{label}</span>
@@ -1440,100 +1433,121 @@ function Sidebar({ view, setView, user, theme, toggleTheme, onLogout }) {
 // ─────────────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────────────
-export default function App() {
-  const [user, setUser]         = useState(()=>{ try{return JSON.parse(localStorage.getItem("ft_user"));}catch{return null;} });
-  const [view, setView]         = useState("my-trees");
-  const [trees, setTrees]       = useState([]);
-  const [treesLoading, setTreesLoading] = useState(true);
-  const [treeView, setTreeView] = useState(null);
-  const treeRef                 = useRef(null);              // always latest tree
-  const { theme, toggle }       = useTheme();
+// ── Error Boundary ────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0d1117",color:"#e6edf3",flexDirection:"column",gap:16,padding:24}}>
+        <i className="ti ti-alert-triangle" style={{fontSize:48,color:"#f85149"}}/>
+        <div style={{fontSize:20,fontWeight:700}}>Something went wrong</div>
+        <div style={{fontSize:13,color:"#8b949e",maxWidth:400,textAlign:"center"}}>{this.state.error.message}</div>
+        <button onClick={()=>window.location.reload()} style={{padding:"10px 24px",background:"#1d4ed8",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:600}}>
+          Reload App
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
-  // Keep ref in sync so closures always see the latest tree
+// ── Main App ──────────────────────────────────────────────
+export default function App() {
+  const [user, setUser]       = useState(() => { try { return JSON.parse(localStorage.getItem("ft_user")); } catch { return null; } });
+  const [view, setView]       = useState("my-trees");
+  const [trees, setTrees]     = useState([]);
+  const [treesLoading, setTreesLoading] = useState(false);
+  const [treeView, setTreeView] = useState(null);
+  const treeRef               = useRef(null);
+  const { theme, toggle }     = useTheme();
+
+  // Always keep ref in sync with latest tree
   useEffect(() => { treeRef.current = treeView; }, [treeView]);
 
-  // Load trees from backend after login
+  // Load user's trees when logged in
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setTrees([]); return; }
     setTreesLoading(true);
     api("GET", "/api/trees")
-      .then(d => { setTrees([...(d.owned||[]),...(d.shared||[])]); })
-      .catch(e => { console.error("Trees fetch failed:", e); setTrees([]); })
+      .then(d => setTrees([...(d.owned||[]), ...(d.shared||[])]))
+      .catch(() => setTrees([]))
       .finally(() => setTreesLoading(false));
   }, [user]);
 
-  // Save tree to backend + update local list
-  const syncTree = async () => {
-    const cur = treeRef.current;
-    if (!cur) return;
-    // Always update local state
-    setTrees(ts => ts.map(t => t.id === cur.id ? {...cur} : t));
-    // Save to backend (skip demo tree)
-    if (cur.id && cur.id !== "demo") {
-      try {
-        await api("PATCH", `/api/trees/${cur.id}`, {
-          treeData:    JSON.stringify({ rootNode: cur.rootNode, persons: cur.persons, memberCounter: cur.memberCounter }),
-          memberCount: Object.keys(cur.persons || {}).length,
-        });
-      } catch(e) { console.error("Auto-save failed:", e.message); }
-    }
-  };
-
-  // Open a tree — load full data from backend
-  const openTree = async (t) => {
-    // Start with basic tree info immediately (fast UI response)
-    setTreeView({ ...t, persons:{}, rootNode:null, members:0, _loading:true });
-    try {
-      const full = await api("GET", `/api/trees/${t.id}`);
-      let persons = {}; let rootNode = null; let memberCounter = 0;
-      if (full.treeData) {
-        try {
-          const parsed = JSON.parse(full.treeData);
-          persons       = parsed.persons       || {};
-          rootNode      = parsed.rootNode      || null;
-          memberCounter = parsed.memberCounter || Object.keys(parsed.persons||{}).length;
-        } catch(parseErr) { console.error("treeData parse error:", parseErr); }
-      }
-      setTreeView({ ...t, ...full, persons, rootNode, memberCounter,
-        members: full.memberCount || Object.keys(persons).length, _loading:false });
-    } catch(e) {
-      console.error("openTree failed:", e.message);
-      // Keep the basic tree info but mark as loaded
-      setTreeView(prev => prev ? {...prev, _loading:false} : null);
-    }
-  };
-
-  // Called by Back button in TreeEditor
-  const syncAndClose = async () => { await syncTree(); setTreeView(null); };
-
-  // Called by sidebar nav buttons
-  const handleNav = async (v) => { await syncTree(); setTreeView(null); setView(v); };
-
+  // Role checks
   const isSuperAdmin = user?.role === "SUPERADMIN";
   const isAdmin      = user?.role === "ADMIN" || isSuperAdmin;
 
-  const logout = () => { localStorage.removeItem("ft_token"); localStorage.removeItem("ft_user"); setUser(null); setView("my-trees"); setTreeView(null); };
+  // Save current tree to backend then update list
+  const saveTree = () => {
+    const cur = treeRef.current;
+    if (!cur || cur.id === "demo") return;
+    setTrees(ts => ts.map(t => t.id === cur.id ? {...cur} : t));
+    api("PATCH", `/api/trees/${cur.id}`, {
+      treeData:    JSON.stringify({ rootNode: cur.rootNode, persons: cur.persons, memberCounter: cur.memberCounter }),
+      memberCount: Object.keys(cur.persons || {}).length,
+    }).catch(e => console.error("Save failed:", e.message));
+  };
 
-  if (!user) return <><GS/><AuthPage onLogin={u=>setUser(u)} theme={theme} toggleTheme={toggle}/></>;
-  return(
-    <><GS/>
+  // Open a tree — fetch full data
+  const openTree = (t) => {
+    setTreeView({ ...t, persons: {}, rootNode: null, members: 0 });
+    if (t.id === "demo") return;
+    api("GET", `/api/trees/${t.id}`)
+      .then(full => {
+        let persons = {}, rootNode = null, memberCounter = 0;
+        if (full.treeData) {
+          try {
+            const p = JSON.parse(full.treeData);
+            persons = p.persons || {};
+            rootNode = p.rootNode || null;
+            memberCounter = p.memberCounter || Object.keys(p.persons||{}).length;
+          } catch {}
+        }
+        setTreeView({ ...t, ...full, persons, rootNode, memberCounter,
+          members: full.memberCount || Object.keys(persons).length });
+      })
+      .catch(() => {});
+  };
+
+  // Back from tree editor
+  const goBack = () => { saveTree(); setTreeView(null); };
+
+  // Navigate via sidebar
+  const navigate = (v) => { saveTree(); setTreeView(null); setView(v); };
+
+  // Logout
+  const logout = () => {
+    localStorage.removeItem("ft_token");
+    localStorage.removeItem("ft_user");
+    setUser(null); setView("my-trees"); setTreeView(null);
+  };
+
+  if (!user) return <><GS/><AuthPage onLogin={u => { setUser(u); }} theme={theme} toggleTheme={toggle}/></>;
+
+  return (
+    <ErrorBoundary>
+      <GS/>
       <div className="app-shell">
-        <Sidebar view={view} setView={handleNav} user={user} theme={theme} toggleTheme={toggle} onLogout={logout}/>
+        <Sidebar view={view} setView={navigate} user={user} theme={theme} toggleTheme={toggle} onLogout={logout} isSuperAdmin={isSuperAdmin} isAdmin={isAdmin}/>
         <div className="app-content">
           {treeView ? (
-            <TreeEditor tree={treeView} setTree={setTreeView} onBack={syncAndClose} allTrees={trees}/>
-          ) : <>
-            {view==="my-trees"        && <MyTreesView     trees={trees} onOpenTree={openTree} treesLoading={treesLoading}/>}
-            {view==="admin-overview"  && isSuperAdmin && <AdminOverviewView/>}
-            {view==="admin-trees"     && <AdminTreesView  onOpenTree={openTree} onTreeCreated={t=>setTrees(ts=>[t,...ts.filter(x=>x.id!==t.id)])} currentUser={user}/>}
-            {view==="admin-users"     && <AdminUsersView   currentUser={user}/>}
-            {view==="master-villages" && isSuperAdmin && <MasterDataView type="villages"/>}
-            {view==="master-surnames" && isSuperAdmin && <MasterDataView type="surnames"/>}
-            {view==="admin-settings"  && isSuperAdmin && <AdminSettingsView/>}
-          </>}
+            <TreeEditor tree={treeView} setTree={setTreeView} onBack={goBack} allTrees={trees}/>
+          ) : (
+            <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              {view==="my-trees"        && <MyTreesView trees={trees} treesLoading={treesLoading} onOpenTree={openTree}/>}
+              {view==="admin-overview"  && isSuperAdmin && <AdminOverviewView/>}
+              {view==="admin-trees"     && isAdmin && <AdminTreesView onOpenTree={openTree} onTreeCreated={t=>setTrees(ts=>[t,...ts.filter(x=>x.id!==t.id)])} currentUser={user}/>}
+              {view==="admin-users"     && isAdmin && <AdminUsersView currentUser={user}/>}
+              {view==="master-villages" && isSuperAdmin && <MasterDataView type="villages"/>}
+              {view==="master-surnames" && isSuperAdmin && <MasterDataView type="surnames"/>}
+              {view==="admin-settings"  && isSuperAdmin && <AdminSettingsView/>}
+            </div>
+          )}
         </div>
       </div>
-    </>
+    </ErrorBoundary>
   );
 }
 
